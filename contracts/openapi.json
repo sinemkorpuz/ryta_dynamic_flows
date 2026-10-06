@@ -127,6 +127,57 @@
         }
       }
     },
+    "/api/v1/checkin/sessions/{session_id}/assist": {
+      "post": {
+        "summary": "Assist Session",
+        "operationId": "assist_session_api_v1_checkin_sessions__session_id__assist_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistQueryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Assist Session Api V1 Checkin Sessions  Session Id  Assist Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/checkin/sessions/{session_id}/seat-map": {
       "get": {
         "summary": "Get Seat Map",
@@ -344,6 +395,22 @@
   },
   "components": {
     "schemas": {
+      "AssistQueryRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 280,
+            "minLength": 1,
+            "title": "Query"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "AssistQueryRequest",
+        "description": "Request body for Help Hub natural-language trip assistance."
+      },
       "CheckoutRequest": {
         "properties": {
           "payment_method_token": {

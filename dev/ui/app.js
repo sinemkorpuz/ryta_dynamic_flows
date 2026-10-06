@@ -1,12 +1,9 @@
 /**
- * Ryanair Dynamic Ancillary Flows — Client State Machine & Stitch Screen Renderer
- * Connects imported Stitch screens (E, A, F, B, D, C, G + Screen 10) to the ADK/FastAPI backend.
+ * Ryanair Dynamic Ancillary Flows — Grounded Client State Machine & Stitch Screen Renderer
+ * Dynamically binds imported Stitch screens (E, A, F, B, D, C, G + Screen 10) to the ADK/FastAPI backend.
  */
 (function () {
   "use strict";
-
-  const HARP_LOGO_URL =
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuCWAfcgHJVx3SrViwJ_ZZBnBchF4_SrbTLqXP_l6xhSc2lWVJD3nwaZZtEReVBRhR-5dzS_OWKcgv3R";
 
   const state = {
     sessionId: null,
@@ -14,6 +11,9 @@
     currentScreen: "checkin_start",
     sessionData: null,
     seatMapData: null,
+    selectedSeats: ["12A", "12B", "12C", "12D"],
+    helpHubResponse: null,
+    helpHubLoading: false,
     basketData: {
       header_title: "Review your extras",
       items: [],
@@ -26,7 +26,6 @@
     analyticsData: null,
     drawerExpanded: false,
     activePassIndex: 0,
-    whoModalOpen: false,
   };
 
   const SCREEN_LABELS = {
@@ -40,6 +39,22 @@
     boarding_passes: "Screen G · Boarding Passes",
   };
 
+  const DOC_NUMBERS = {
+    "pax-1": "IRL •••• 9821",
+    "pax-2": "IRL •••• 4120",
+    "pax-3": "IRL •••• 7731",
+    "pax-4": "IRL •••• 6614",
+  };
+
+  const ICON_MATERIAL_MAP = {
+    bag: "luggage",
+    seat: "airline_seat_recline_extra",
+    suitcase: "luggage",
+    car: "directions_car",
+    bolt: "bolt",
+    shield: "verified_user",
+  };
+
   function showToast(message) {
     const toast = document.getElementById("mobile-toast");
     const text = document.getElementById("mobile-toast-text");
@@ -49,7 +64,7 @@
     clearTimeout(showToast._timer);
     showToast._timer = setTimeout(() => {
       toast.classList.add("hidden");
-    }, 3200);
+    }, 3400);
   }
 
   async function apiFetch(path, options) {
@@ -68,6 +83,8 @@
     state.personaId = personaId || state.personaId;
     state.drawerExpanded = false;
     state.activePassIndex = 0;
+    state.helpHubResponse = null;
+    state.seatMapData = null;
 
     const session = await apiFetch("/api/v1/checkin/sessions", {
       method: "POST",
@@ -79,6 +96,7 @@
 
     state.sessionId = session.session_id;
     state.sessionData = session;
+    state.selectedSeats = ["12A", "12B", "12C", "12D"];
     state.currentScreen = "checkin_start";
     state.basketData = {
       header_title: "Review your extras",
@@ -135,6 +153,12 @@
     return found ? found.quantity : 0;
   }
 
+  function formatChildAgeBadge(passenger) {
+    if (passenger.age === 6) return "Child (6y)";
+    if (passenger.age === 9) return "Child (9y)";
+    return `Child (${passenger.age}y)`;
+  }
+
   function updateHeaderBadges() {
     const badge = document.getElementById("active-screen-badge");
     if (badge) {
@@ -168,16 +192,16 @@
         viewport.innerHTML = renderScreenLoading();
         break;
       case "offer_page_1":
-        viewport.innerHTML = renderScreenA();
-        bindScreenA();
+        viewport.innerHTML = renderOfferPage(0);
+        bindOfferPage(0);
         break;
       case "seat_map":
         viewport.innerHTML = renderScreenF();
         bindScreenF();
         break;
       case "offer_page_2":
-        viewport.innerHTML = renderScreenB();
-        bindScreenB();
+        viewport.innerHTML = renderOfferPage(1);
+        bindOfferPage(1);
         break;
       case "review_and_pay":
         viewport.innerHTML = renderScreenD();
@@ -198,17 +222,23 @@
   }
 
   /* ==========================================================================
-   * SCREEN E — Check-in Start (Full Greeting Header + Help Hub Search Bar + Fixed Child Ages 6y & 9y)
+   * SCREEN E — Check-in Start (Grounded in sessionData.booking, passengers & ADK /assist)
    * ========================================================================== */
   function renderScreenE() {
     const s = state.sessionData;
+    const booking = s.booking || {};
+    const passengers = s.passengers || [];
+    const lead =
+      passengers.find((p) => p.is_lead_booker) ||
+      passengers[0] || { full_name: "Marta Byrne", initials: "MB" };
+    const leadFirstName = (lead.full_name || "Marta").split(" ")[0];
     const stepPillText = s.entry_step_pill || "2 STEPS TO YOUR BOARDING PASSES";
     const isZero = s.flow_branch === "zero_offer";
 
     return `
       <div class="flex flex-col w-full pb-6">
         <!-- Navy Header Sheet Block (Full Greeting Header) -->
-        <div class="bg-primary-container px-margin pt-4 rounded-b-3xl shadow-sm text-on-primary relative overflow-hidden pb-8">
+        <div class="bg-primary-container px-margin pt-4 rounded-b-3xl shadow-sm text-on-primary relative overflow-hidden pb-7">
           <svg class="absolute -right-12 -bottom-10 w-64 h-64 text-on-primary/5 pointer-events-none" fill="none" viewBox="0 0 200 200">
             <path d="M10 180 C 60 120, 140 140, 190 20" stroke="currentColor" stroke-dasharray="4 6" stroke-width="2"></path>
             <circle cx="190" cy="20" fill="currentColor" r="4"></circle>
@@ -225,28 +255,62 @@
                 <span class="material-symbols-outlined text-[20px]">notifications</span>
               </button>
               <div class="w-9 h-9 rounded-full bg-primary flex items-center justify-center ring-2 ring-secondary-fixed text-on-primary font-bold text-label-md">
-                MB
+                ${lead.initials || "MB"}
               </div>
             </div>
           </div>
           <div class="relative z-10 pt-1">
-            <h1 class="font-headline-lg text-headline-lg text-on-primary tracking-tight font-bold">Hi Marta,</h1>
+            <h1 class="font-headline-lg text-headline-lg text-on-primary tracking-tight font-bold">Hi ${leadFirstName},</h1>
             <p class="font-body-md text-body-md text-on-primary/80 mt-0.5">Let's get you checked in</p>
-            <!-- Help Hub Search Bar retained per design decision -->
+
+            <!-- Live ADK Help Hub Search Bar -->
             <div class="bg-surface-page rounded-full px-4 py-2.5 flex items-center justify-between shadow-sm mt-4 text-text-body">
               <div class="flex items-center gap-2.5 flex-1 min-w-0 mr-2">
                 <span class="material-symbols-outlined text-[20px] text-text-heading flex-shrink-0">search</span>
-                <input id="help-hub-input" type="text" placeholder="Ask or search for help with this trip" class="w-full bg-transparent outline-none font-body-sm text-body-sm text-text-heading placeholder:text-text-body truncate" />
+                <input id="help-hub-input" type="text" value="${
+                  state.helpHubResponse ? state.helpHubResponse.query : ""
+                }" placeholder="Ask or search for help with this trip" class="w-full bg-transparent outline-none font-body-sm text-body-sm text-text-heading placeholder:text-text-body truncate" />
               </div>
-              <button id="help-hub-submit" type="button" aria-label="Search" class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-text-heading flex-shrink-0 transition-colors hover:bg-surface-variant">
-                <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+              <button id="help-hub-submit" type="button" aria-label="Ask Assistant" class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-text-heading flex-shrink-0 transition-colors hover:bg-surface-variant">
+                <span class="material-symbols-outlined text-[18px]">${
+                  state.helpHubLoading ? "hourglass_top" : "arrow_forward"
+                }</span>
               </button>
+            </div>
+
+            <!-- Quick-Ask Grounded Chips -->
+            <div class="flex items-center gap-1.5 mt-2.5 overflow-x-auto no-scrollbar">
+              <button type="button" data-quick-ask="Sitting with children?" class="quick-ask-chip px-2.5 py-1 rounded-full bg-on-primary/10 hover:bg-on-primary/20 text-[11px] font-medium text-on-primary whitespace-nowrap transition-colors">Sitting with children?</button>
+              <button type="button" data-quick-ask="Cabin & 20kg bag rules?" class="quick-ask-chip px-2.5 py-1 rounded-full bg-on-primary/10 hover:bg-on-primary/20 text-[11px] font-medium text-on-primary whitespace-nowrap transition-colors">Cabin &amp; 20kg bags?</button>
+              <button type="button" data-quick-ask="Gate & departure info?" class="quick-ask-chip px-2.5 py-1 rounded-full bg-on-primary/10 hover:bg-on-primary/20 text-[11px] font-medium text-on-primary whitespace-nowrap transition-colors">Gate &amp; terminal?</button>
             </div>
           </div>
         </div>
 
         <!-- Content Body Container -->
         <div class="px-margin flex flex-col gap-space-lg -mt-3 relative z-20">
+          ${
+            state.helpHubResponse
+              ? `
+          <!-- Grounded ADK Help Hub Response Card (surface/ai #F2F1FE) -->
+          <div class="rounded-[18px] bg-surface-ai p-3.5 shadow-sm border border-[#4B2EDB]/15 flex items-start justify-between gap-2.5">
+            <div class="flex items-start gap-2.5 min-w-0">
+              <div class="w-8 h-8 rounded-full bg-[#4B2EDB] flex items-center justify-center text-on-primary shrink-0 mt-0.5">
+                <span class="material-symbols-outlined text-[17px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+              </div>
+              <div class="flex flex-col min-w-0">
+                <span class="font-title-md text-title-md text-[#4B2EDB] font-bold">${state.helpHubResponse.heading}</span>
+                <p class="font-body-sm text-body-sm text-text-body mt-0.5">${state.helpHubResponse.supporting_text}</p>
+              </div>
+            </div>
+            <button id="close-help-hub-card" type="button" aria-label="Dismiss" class="text-text-body hover:text-text-heading p-1">
+              <span class="material-symbols-outlined text-[16px]">close</span>
+            </button>
+          </div>
+          `
+              : ""
+          }
+
           <!-- Dynamic Step Progress Indicator Capsule -->
           <div class="flex items-center justify-between bg-surface-page rounded-xl shadow-sm p-3.5 border border-border-hairline">
             <div class="flex items-center gap-space-sm min-w-0">
@@ -272,7 +336,7 @@
             </div>
           </div>
 
-          <!-- Flight Entity Card -->
+          <!-- Flight Entity Card (Grounded in sessionData.booking) -->
           <div class="bg-surface-page rounded-xl p-4 shadow-sm border border-border-hairline relative">
             <div class="flex items-start justify-between gap-space-sm mb-3">
               <div class="flex items-center gap-space-sm">
@@ -280,21 +344,21 @@
                   <span class="material-symbols-outlined text-[22px]">flight_takeoff</span>
                 </div>
                 <div>
-                  <h2 class="font-title-md text-title-md text-text-heading font-semibold">Dublin → Faro</h2>
-                  <p class="font-body-sm text-body-sm text-text-body">Tue 14 Oct · FR1234 · 06:35</p>
+                  <h2 class="font-title-md text-title-md text-text-heading font-semibold">${booking.origin_name || "Dublin"} → ${booking.destination_name || "Faro"}</h2>
+                  <p class="font-body-sm text-body-sm text-text-body">${booking.departure_date_label || "Tue 14 Oct"} · ${booking.flight_number || "FR1234"} · ${booking.departure_time || "06:35"}</p>
                 </div>
               </div>
               <span class="inline-flex items-center px-2.5 py-1 rounded-full font-label-md text-label-md bg-secondary-container text-on-secondary-fixed font-bold shadow-xs">
-                Check-in open
+                ${booking.status_badge || "Check-in open"}
               </span>
             </div>
             <div class="bg-surface-container-low rounded-lg p-3 flex items-center justify-between text-center mt-2">
               <div class="text-left">
-                <span class="font-headline-sm text-headline-sm text-text-heading leading-none block">DUB</span>
-                <span class="font-label-sm text-label-sm text-text-body block mt-0.5">Terminal 1 · Gate 104</span>
+                <span class="font-headline-sm text-headline-sm text-text-heading leading-none block">${booking.origin_code || "DUB"}</span>
+                <span class="font-label-sm text-label-sm text-text-body block mt-0.5">${booking.origin_terminal || "Terminal 1"} · Gate ${booking.gate || "104"}</span>
               </div>
               <div class="flex-1 px-3 flex flex-col items-center">
-                <span class="font-label-sm text-label-sm text-text-body mb-1">2h 55m</span>
+                <span class="font-label-sm text-label-sm text-text-body mb-1">2h 55m · ${booking.trip_nights || 7} nights</span>
                 <div class="w-full flex items-center gap-1">
                   <div class="w-2 h-2 rounded-full bg-primary-container"></div>
                   <div class="flex-1 h-0.5 bg-outline-variant/60 relative">
@@ -302,86 +366,62 @@
                   </div>
                   <div class="w-2 h-2 rounded-full bg-primary-container"></div>
                 </div>
-                <span class="font-label-sm text-label-sm text-pill-done-text font-bold mt-1">On schedule</span>
+                <span class="font-label-sm text-label-sm text-pill-done-text font-bold mt-1">PNR ${booking.booking_reference || "X8Y9QL"}</span>
               </div>
               <div class="text-right">
-                <span class="font-headline-sm text-headline-sm text-text-heading leading-none block">FAO</span>
+                <span class="font-headline-sm text-headline-sm text-text-heading leading-none block">${booking.destination_code || "FAO"}</span>
                 <span class="font-label-sm text-label-sm text-text-body block mt-0.5">Main Terminal</span>
               </div>
             </div>
           </div>
 
-          <!-- Passenger Roster Section (Sanitized Child Ages: Fia B 6y, Oisín B 9y) -->
+          <!-- Passenger Roster Section (Grounded in sessionData.passengers with Child (6y) & Child (9y) badges) -->
           <div class="flex flex-col gap-space-sm">
             <div class="flex items-center justify-between px-1">
-              <span class="font-label-sm text-label-sm text-primary font-bold tracking-wider uppercase">4 Passengers</span>
+              <span class="font-label-sm text-label-sm text-primary font-bold tracking-wider uppercase">${passengers.length} Passengers</span>
               <span class="font-label-sm text-label-sm text-pill-done-text flex items-center gap-1 font-semibold">
                 <span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">verified</span>
                 Passports on file
               </span>
             </div>
             <div class="bg-surface-page rounded-xl shadow-sm border border-border-hairline overflow-hidden divide-y divide-border-hairline">
-              <!-- Marta B -->
+              ${passengers
+                .map((p) => {
+                  const isChild = p.passenger_type === "child";
+                  const cleanName = (p.display_name || p.full_name || "").split(" · ")[0];
+                  const docMask = DOC_NUMBERS[p.passenger_id] || "IRL •••• 9821";
+                  return `
               <div class="p-3.5 flex items-center justify-between">
                 <div class="flex items-center gap-space-sm min-w-0">
-                  <div class="w-10 h-10 rounded-full bg-pill-next-bg text-pill-next-text flex items-center justify-center font-title-md text-title-md font-bold flex-shrink-0 ring-2 ring-primary/10">MB</div>
+                  <div class="w-10 h-10 rounded-full ${
+                    isChild
+                      ? "bg-secondary-fixed/40 text-on-secondary-fixed"
+                      : "bg-pill-next-bg text-pill-next-text"
+                  } flex items-center justify-center font-title-md text-title-md font-bold flex-shrink-0">${p.initials}</div>
                   <div class="flex flex-col min-w-0">
                     <div class="flex items-center gap-1.5 flex-wrap">
-                      <span class="font-title-md text-title-md text-text-heading font-semibold truncate">Marta B</span>
-                      <span class="bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm px-1.5 py-0.5 rounded uppercase font-bold tracking-wide">Lead Booker</span>
+                      <span class="font-title-md text-title-md text-text-heading font-semibold truncate">${cleanName}</span>
+                      ${
+                        p.is_lead_booker
+                          ? `<span class="bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm px-1.5 py-0.5 rounded uppercase font-bold tracking-wide">Lead Booker</span>`
+                          : ""
+                      }
+                      ${
+                        isChild
+                          ? `<span class="bg-pill-plan-bg text-pill-plan-text font-label-sm text-label-sm px-1.5 py-0.5 rounded font-bold">${formatChildAgeBadge(p)}</span>`
+                          : ""
+                      }
                     </div>
                     <span class="font-body-sm text-body-sm text-text-body flex items-center gap-1 mt-0.5">
                       <span class="material-symbols-outlined text-[14px] text-pill-done-text">check_circle</span>
-                      Document verified · IRL •••• 9821
+                      Document verified · ${docMask}
                     </span>
                   </div>
                 </div>
               </div>
-              <!-- Declan B -->
-              <div class="p-3.5 flex items-center justify-between">
-                <div class="flex items-center gap-space-sm min-w-0">
-                  <div class="w-10 h-10 rounded-full bg-pill-next-bg text-pill-next-text flex items-center justify-center font-title-md text-title-md font-bold flex-shrink-0">DB</div>
-                  <div class="flex flex-col min-w-0">
-                    <span class="font-title-md text-title-md text-text-heading font-semibold truncate">Declan B</span>
-                    <span class="font-body-sm text-body-sm text-text-body flex items-center gap-1 mt-0.5">
-                      <span class="material-symbols-outlined text-[14px] text-pill-done-text">check_circle</span>
-                      Document verified · IRL •••• 4120
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <!-- Fia B (Child, age 6) -->
-              <div class="p-3.5 flex items-center justify-between">
-                <div class="flex items-center gap-space-sm min-w-0">
-                  <div class="w-10 h-10 rounded-full bg-secondary-fixed/40 text-on-secondary-fixed flex items-center justify-center font-title-md text-title-md font-bold flex-shrink-0">FB</div>
-                  <div class="flex flex-col min-w-0">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                      <span class="font-title-md text-title-md text-text-heading font-semibold truncate">Fia B</span>
-                      <span class="bg-pill-plan-bg text-pill-plan-text font-label-sm text-label-sm px-1.5 py-0.5 rounded font-bold">Child (6y)</span>
-                    </div>
-                    <span class="font-body-sm text-body-sm text-text-body flex items-center gap-1 mt-0.5">
-                      <span class="material-symbols-outlined text-[14px] text-pill-done-text">check_circle</span>
-                      Document verified · IRL •••• 7731
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <!-- Oisín B (Child, age 9) -->
-              <div class="p-3.5 flex items-center justify-between">
-                <div class="flex items-center gap-space-sm min-w-0">
-                  <div class="w-10 h-10 rounded-full bg-secondary-fixed/40 text-on-secondary-fixed flex items-center justify-center font-title-md text-title-md font-bold flex-shrink-0">OB</div>
-                  <div class="flex flex-col min-w-0">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                      <span class="font-title-md text-title-md text-text-heading font-semibold truncate">Oisín B</span>
-                      <span class="bg-pill-plan-bg text-pill-plan-text font-label-sm text-label-sm px-1.5 py-0.5 rounded font-bold">Child (9y)</span>
-                    </div>
-                    <span class="font-body-sm text-body-sm text-text-body flex items-center gap-1 mt-0.5">
-                      <span class="material-symbols-outlined text-[14px] text-pill-done-text">check_circle</span>
-                      Document verified · IRL •••• 6614
-                    </span>
-                  </div>
-                </div>
-              </div>
+                  `;
+                })
+                .join("")}
             </div>
           </div>
 
@@ -401,6 +441,27 @@
     `;
   }
 
+  async function submitHelpHubQuery(rawQuery) {
+    const q = (rawQuery || "").trim() || "Tell me about this flight and seating";
+    state.helpHubLoading = true;
+    renderCurrentScreen();
+    try {
+      const res = await apiFetch(
+        `/api/v1/checkin/sessions/${state.sessionId}/assist`,
+        {
+          method: "POST",
+          body: JSON.stringify({ query: q }),
+        }
+      );
+      state.helpHubResponse = res;
+    } catch (err) {
+      showToast(`Help Hub error: ${err.message}`);
+    } finally {
+      state.helpHubLoading = false;
+      renderCurrentScreen();
+    }
+  }
+
   function bindScreenE() {
     const startBtn = document.getElementById("start-checkin-btn");
     if (startBtn) {
@@ -413,19 +474,38 @@
               ? "zero_offer"
               : "offer_page_1";
           renderCurrentScreen();
-        }, 380);
+        }, 340);
       });
     }
+
+    const helpInput = document.getElementById("help-hub-input");
     const helpBtn = document.getElementById("help-hub-submit");
     if (helpBtn) {
       helpBtn.addEventListener("click", () => {
-        const input = document.getElementById("help-hub-input");
-        const q = input && input.value.trim();
-        showToast(
-          q
-            ? `Flight FR1234 departs 06:35 from DUB Terminal 1, Gate 104.`
-            : "Tap 'Start check-in' below to complete check-in in 2 steps."
-        );
+        submitHelpHubQuery(helpInput ? helpInput.value : "");
+      });
+    }
+    if (helpInput) {
+      helpInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submitHelpHubQuery(helpInput.value);
+        }
+      });
+    }
+
+    document.querySelectorAll(".quick-ask-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const q = chip.getAttribute("data-quick-ask");
+        submitHelpHubQuery(q);
+      });
+    });
+
+    const closeCardBtn = document.getElementById("close-help-hub-card");
+    if (closeCardBtn) {
+      closeCardBtn.addEventListener("click", () => {
+        state.helpHubResponse = null;
+        renderCurrentScreen();
       });
     }
   }
@@ -434,6 +514,7 @@
    * SCREEN 2 (Transient) — "Getting your trip ready." Skeleton State
    * ========================================================================== */
   function renderScreenLoading() {
+    const booking = (state.sessionData && state.sessionData.booking) || {};
     return `
       <div class="flex-1 flex flex-col items-center justify-center px-margin py-16 text-center gap-4">
         <div class="w-12 h-12 rounded-full bg-surface-ai flex items-center justify-center text-[#4B2EDB] animate-pulse">
@@ -441,7 +522,7 @@
         </div>
         <div>
           <p class="font-title-md text-text-heading font-semibold">Getting your trip ready.</p>
-          <p class="font-body-sm text-text-body mt-1"> Dublin → Faro · FR1234</p>
+          <p class="font-body-sm text-text-body mt-1">${booking.origin_name || "Dublin"} → ${booking.destination_name || "Faro"} · ${booking.flight_number || "FR1234"}</p>
         </div>
         <div class="w-full max-w-xs space-y-3 mt-4">
           <div class="h-20 rounded-xl bg-surface-container-low animate-pulse"></div>
@@ -453,61 +534,198 @@
   }
 
   /* ==========================================================================
-   * SCREEN A — Offer Page 1 ("Step 1 of 2" / "Step 1 of 1")
+   * SCREENS A & B — Dynamic Offer Pages 1 & 2 (Grounded in sessionData.pages[pageIndex])
    * ========================================================================== */
-  function renderScreenA() {
+  function renderDynamicOfferCard(card) {
+    const pid = card.product_id;
+    const selected = isProductSelected(pid);
+    const qty = getProductQuantity(pid);
+    const iconName = ICON_MATERIAL_MAP[card.icon] || "luggage";
+    const pillClass =
+      card.status_pill_token === "pill/review"
+        ? "bg-pill-review-bg text-pill-review-text"
+        : card.status_pill_token === "pill/plan"
+        ? "bg-pill-plan-bg text-pill-plan-text"
+        : "bg-pill-next-bg text-pill-next-text";
+
+    if (card.control_type === "seat_map_trigger") {
+      const seatSummary = selected
+        ? `${state.selectedSeats.join(", ")} reserved`
+        : "Row 12 · Together";
+      return `
+        <div class="bg-surface-page rounded-xl p-space-md border border-border-hairline flex flex-col gap-space-sm shadow-sm">
+          <div class="flex items-center justify-between gap-space-sm">
+            <div class="flex items-center gap-space-sm">
+              <span class="material-symbols-outlined text-primary text-[22px] flex-shrink-0">${iconName}</span>
+              <span class="font-title-md text-title-md text-text-heading">${card.title}</span>
+            </div>
+            ${
+              card.status_pill
+                ? `<span class="px-2 py-0.5 rounded-full ${pillClass} font-label-sm text-label-sm flex-shrink-0">${card.status_pill}</span>`
+                : ""
+            }
+          </div>
+          <p class="font-body-sm text-body-sm text-text-body">${card.description}</p>
+          <div class="flex items-center justify-between pt-1 mt-1">
+            <div class="flex flex-col">
+              <span class="text-[18px] font-bold text-text-heading">${card.price_label}</span>
+              <span class="font-label-md text-label-md text-text-body">${seatSummary}</span>
+            </div>
+            <button type="button" data-seat-trigger="${pid}" class="${
+              selected
+                ? "px-5 py-2 rounded-full bg-pill-done-bg text-pill-done-text border-[1.5px] border-pill-done-text font-title-md text-body-md font-semibold transition-all"
+                : "px-5 py-2 rounded-full border-[1.5px] border-primary-container text-primary-container font-title-md text-body-md font-semibold hover:bg-primary-container/5 transition-all"
+            }">
+              ${selected ? `Seats ${state.selectedSeats[0]}–${state.selectedSeats[state.selectedSeats.length - 1]} ✓` : card.cta_label}
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    if (card.control_type === "quantity_stepper") {
+      return `
+        <div class="bg-surface-page rounded-xl p-space-md border border-border-hairline flex flex-col gap-space-md shadow-sm">
+          <div class="flex items-start justify-between gap-space-sm">
+            <div class="flex items-start gap-space-sm">
+              <div class="w-10 h-10 rounded-lg bg-surface-container-low flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-primary text-[22px]">${iconName}</span>
+              </div>
+              <div class="flex flex-col">
+                <span class="font-title-md text-title-md text-text-heading">${card.title}</span>
+                <span class="font-body-sm text-body-sm text-text-body">${card.description}</span>
+              </div>
+            </div>
+            <div class="text-right shrink-0">
+              <span class="text-[18px] font-bold text-text-heading">${card.price_label}</span>
+              <span class="block font-label-sm text-label-sm text-text-body font-normal">for this flight</span>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <div class="flex items-center bg-surface-container-low rounded-full px-1.5 py-1">
+              <button type="button" data-qty-dec="${pid}" aria-label="Decrease quantity" ${
+                qty === 0 ? "disabled" : ""
+              } class="w-7 h-7 rounded-full flex items-center justify-center text-outline transition-colors disabled:opacity-40 hover:bg-surface-page">
+                <span class="material-symbols-outlined text-[16px]">remove</span>
+              </button>
+              <span class="w-8 text-center font-title-md text-text-heading select-none">${qty}</span>
+              <button type="button" data-qty-inc="${pid}" aria-label="Increase quantity" class="w-7 h-7 rounded-full flex items-center justify-center text-primary transition-colors hover:bg-surface-page">
+                <span class="material-symbols-outlined text-[16px]">add</span>
+              </button>
+            </div>
+            <button type="button" data-card-toggle="${pid}" class="${
+              qty > 0
+                ? "px-5 py-2 rounded-full bg-pill-done-bg text-pill-done-text border-[1.5px] border-pill-done-text font-title-md text-body-md font-semibold transition-all"
+                : "px-5 py-2 rounded-full border-[1.5px] border-primary-container text-primary-container font-title-md text-body-md font-semibold hover:bg-primary-container/5 transition-all"
+            }">
+              ${qty > 0 ? `Selected (${qty}) ✓` : card.cta_label}
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Default: toggle_all_pax
+    return `
+      <div class="bg-surface-page rounded-xl p-space-md border border-border-hairline flex flex-col gap-space-sm shadow-sm">
+        <div class="flex items-center justify-between gap-space-sm">
+          <div class="flex items-center gap-space-sm">
+            <span class="material-symbols-outlined text-primary text-[22px] flex-shrink-0">${iconName}</span>
+            <span class="font-title-md text-title-md text-text-heading">${card.title}</span>
+          </div>
+          ${
+            card.status_pill
+              ? `<span class="px-2 py-0.5 rounded-full ${pillClass} font-label-sm text-label-sm flex-shrink-0">${card.status_pill}</span>`
+              : ""
+          }
+        </div>
+        <p class="font-body-sm text-body-sm text-text-body">${card.description}</p>
+        <div class="flex items-center justify-between pt-1 mt-1">
+          <div class="flex flex-col">
+            <span class="text-[18px] font-bold text-text-heading">${card.price_label}</span>
+            ${
+              card.secondary_link_label
+                ? `<button type="button" data-secondary-link="${pid}" class="text-left font-label-md text-label-md text-primary-container underline mt-0.5">${card.secondary_link_label}</button>`
+                : ""
+            }
+          </div>
+          <button type="button" data-card-toggle="${pid}" class="${
+            selected
+              ? "px-5 py-2 rounded-full bg-pill-done-bg text-pill-done-text border-[1.5px] border-pill-done-text font-title-md text-body-md font-semibold transition-all"
+              : "px-5 py-2 rounded-full border-[1.5px] border-primary-container text-primary-container font-title-md text-body-md font-semibold hover:bg-primary-container/5 transition-all"
+          }">
+            ${selected ? "✓ Added" : card.cta_label}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderOfferPage(pageIndex) {
     const s = state.sessionData;
-    const page = (s.pages && s.pages[0]) || {
-      step_indicator: "Step 1 of 2",
-      assistant_panel: {
-        heading: "You usually travel with Priority",
-        supporting_text: "You added it on your last 3 trips.",
-      },
-      cards: [],
-      drawer_items: [],
-    };
-    const priorityAdded = isProductSelected("priority_boarding");
-    const seatsAdded = isProductSelected("reserved_seats");
-    const hasSitTogetherCard = page.cards.some(
-      (c) => c.product_id === "reserved_seats"
-    );
-    const hasNextOfferPage = s.pages && s.pages.length >= 2;
-    const continueLabel =
-      priorityAdded || seatsAdded
-        ? hasNextOfferPage
-          ? "Continue to Step 2"
-          : "Review your extras"
-        : "No thanks, continue";
+    const booking = s.booking || {};
+    const pages = s.pages || [];
+    const page = pages[pageIndex] || pages[0];
+    if (!page) {
+      return renderScreenC();
+    }
+
+    const cards = page.cards || [];
+    const drawerItems = page.drawer_items || [];
+    const hasSelectionOnPage =
+      cards.some((c) => isProductSelected(c.product_id)) ||
+      drawerItems.some((d) => isProductSelected(d.product_id));
+    const hasNextOfferPage = pageIndex === 0 && pages.length >= 2;
+    const continueLabel = hasSelectionOnPage
+      ? hasNextOfferPage
+        ? "Continue to Step 2"
+        : "Confirm & Continue"
+      : (page.decline_cta_label || "No thanks, continue").replace(" →", "");
 
     return `
       <div class="flex flex-col w-full pb-8">
         <!-- Compact Brand Navy Header Block (Header Ladder Rule: no duplicate greeting) -->
         <div class="bg-primary-container px-margin py-3.5 rounded-b-[24px] shadow-sm flex items-center justify-between text-on-primary">
-          <button id="screen-a-back" type="button" aria-label="Back" class="w-9 h-9 flex items-center justify-start text-on-primary hover:opacity-80 transition-opacity">
+          <button id="offer-page-back" type="button" aria-label="Back" class="w-9 h-9 flex items-center justify-start text-on-primary hover:opacity-80 transition-opacity">
             <span class="material-symbols-outlined text-[24px]">arrow_back</span>
           </button>
-          <h1 class="font-title-md text-title-md font-bold text-on-primary text-center flex-1">Check in</h1>
+          <h1 class="font-title-md text-title-md font-bold text-on-primary text-center flex-1">${page.header_title || "Check in"}</h1>
           <span class="font-label-md text-label-md text-on-primary/90 text-right min-w-[72px]">${page.step_indicator}</span>
         </div>
 
         <div class="px-margin flex flex-col gap-space-lg pt-space-lg">
-          <!-- Flight Route Entity Card -->
+          ${
+            page.section_heading
+              ? `
+          <!-- Section Heading (Sanitized: single-flight scope "for this flight") -->
+          <div class="flex flex-col items-start gap-1">
+            <h2 class="font-headline-sm text-headline-sm text-text-heading">${page.section_heading}</h2>
+            <p class="font-body-sm text-body-sm text-text-body">
+              Customise your checked luggage allowance for this flight.
+            </p>
+          </div>
+          `
+              : `
+          <!-- Flight Route Entity Card (Grounded in sessionData.booking) -->
           <div class="bg-surface-page rounded-xl p-space-md shadow-sm border border-border-hairline flex items-center justify-between gap-space-sm">
             <div class="flex items-center gap-space-md">
               <div class="w-10 h-10 rounded-full bg-surface-container-low flex items-center justify-center flex-shrink-0 text-primary">
                 <span class="material-symbols-outlined text-[22px]">flight_takeoff</span>
               </div>
               <div class="flex flex-col">
-                <h2 class="font-title-md text-title-md text-text-heading truncate">Dublin → Faro</h2>
-                <p class="font-body-sm text-body-sm text-text-body truncate">Tue 14 Oct · FR1234 · 06:35</p>
+                <h2 class="font-title-md text-title-md text-text-heading truncate">${booking.origin_name || "Dublin"} → ${booking.destination_name || "Faro"}</h2>
+                <p class="font-body-sm text-body-sm text-text-body truncate">${booking.departure_date_label || "Tue 14 Oct"} · ${booking.flight_number || "FR1234"} · ${booking.departure_time || "06:35"}</p>
               </div>
             </div>
             <span class="px-2.5 py-1 rounded-md bg-secondary-fixed text-on-secondary-fixed font-label-md text-label-md flex-shrink-0">
-              Check-in open
+              ${booking.status_badge || "Check-in open"}
             </span>
           </div>
+          `
+          }
 
-          <!-- Lavender Assistant Insight Panel (surface/ai #F2F1FE) -->
+          <!-- Lavender Assistant Insight Panel (surface/ai #F2F1FE) + Dynamic Offer Cards -->
           <div class="bg-surface-ai rounded-[18px] p-space-lg flex flex-col gap-space-md shadow-sm">
             <div class="flex items-start gap-space-md">
               <div class="w-9 h-9 rounded-full bg-[#4B2EDB] flex items-center justify-center flex-shrink-0 text-on-primary shadow-sm">
@@ -519,74 +737,66 @@
               </div>
             </div>
 
-            <!-- Card A: Priority & 2 Cabin Bags -->
-            <div class="bg-surface-page rounded-xl p-space-md border border-border-hairline flex flex-col gap-space-sm shadow-sm">
-              <div class="flex items-center justify-between gap-space-sm">
-                <div class="flex items-center gap-space-sm">
-                  <span class="material-symbols-outlined text-primary text-[22px] flex-shrink-0">luggage</span>
-                  <span class="font-title-md text-title-md text-text-heading">Priority &amp; 2 Cabin Bags</span>
+            ${cards.map((card) => renderDynamicOfferCard(card)).join("")}
+          </div>
+
+          ${
+            drawerItems.length > 0
+              ? `
+          <!-- Collapsed Demotion Drawer (Grounded in page.drawer_items) -->
+          <div class="flex flex-col rounded-xl border border-border-hairline bg-surface-page shadow-sm overflow-hidden">
+            <button id="drawer-toggle-btn" type="button" class="w-full p-space-md flex items-center justify-between hover:bg-surface-container-low/60 transition-colors">
+              <div class="flex items-center gap-space-sm">
+                <div class="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center">
+                  <span class="material-symbols-outlined text-primary text-[18px]">directions_car</span>
                 </div>
-                <span class="px-2 py-0.5 rounded-full bg-pill-next-bg text-pill-next-text font-label-sm text-label-sm flex-shrink-0">
-                  Your usual
-                </span>
-              </div>
-              <p class="font-body-sm text-body-sm text-text-body">Skip the queue, 2 bags each</p>
-              <div class="flex items-center justify-between pt-1 mt-1">
-                <div class="flex flex-col">
-                  <span class="text-[18px] font-bold text-text-heading">€76 for 4 passengers</span>
-                  <button id="choose-who-link" type="button" class="text-left font-label-md text-label-md text-primary-container underline mt-0.5">
-                    Choose who gets it
-                  </button>
+                <div class="flex flex-col items-start">
+                  <span class="font-body-md text-body-md font-semibold text-text-heading">${
+                    page.drawer_label || `More extras (${drawerItems.length})`
+                  }</span>
+                  <span class="font-body-sm text-body-sm text-text-body">${drawerItems
+                    .map((d) => d.title)
+                    .join(" · ")}</span>
                 </div>
-                <button id="toggle-priority-btn" type="button" class="${
-                  priorityAdded
-                    ? "px-5 py-2 rounded-full bg-pill-done-bg text-pill-done-text border-[1.5px] border-pill-done-text font-title-md text-body-md font-semibold transition-all"
-                    : "px-5 py-2 rounded-full border-[1.5px] border-primary-container text-primary-container font-title-md text-body-md font-semibold hover:bg-primary-container/5 transition-all"
-                }">
-                  ${priorityAdded ? "✓ Added" : "Add"}
-                </button>
               </div>
-            </div>
+              <span class="material-symbols-outlined text-outline text-[20px] transition-transform ${
+                state.drawerExpanded ? "rotate-90" : ""
+              }">chevron_right</span>
+            </button>
 
             ${
-              hasSitTogetherCard
-                ? `
-            <!-- Card B: Sit together -->
-            <div class="bg-surface-page rounded-xl p-space-md border border-border-hairline flex flex-col gap-space-sm shadow-sm">
-              <div class="flex items-center justify-between gap-space-sm">
-                <div class="flex items-center gap-space-sm">
-                  <span class="material-symbols-outlined text-primary text-[22px] flex-shrink-0">airline_seat_recline_extra</span>
-                  <span class="font-title-md text-title-md text-text-heading">Sit together</span>
-                </div>
-                <span class="px-2 py-0.5 rounded-full bg-pill-review-bg text-pill-review-text font-label-sm text-label-sm flex-shrink-0">
-                  Recommended
-                </span>
+              state.drawerExpanded
+                ? drawerItems
+                    .map((d) => {
+                      const dSel = isProductSelected(d.product_id);
+                      return `
+            <div class="px-space-md pb-space-md pt-2 border-t border-border-hairline bg-surface-container-low/40 flex items-center justify-between gap-3">
+              <div class="flex flex-col">
+                <span class="font-title-md text-text-heading">${d.title}</span>
+                <span class="font-body-sm text-text-body">${d.description}</span>
+                <span class="font-title-md text-text-heading font-bold mt-1">${d.price_label}</span>
               </div>
-              <p class="font-body-sm text-body-sm text-text-body">Seats are assigned free, but your family may be split up</p>
-              <div class="flex items-center justify-between pt-1 mt-1">
-                <div class="flex flex-col">
-                  <span class="text-[18px] font-bold text-text-heading">€24 for 4 seats</span>
-                  <span class="font-label-md text-label-md text-text-body">${
-                    seatsAdded ? "Row 12 (12A–12D) reserved" : "Row 12 · Together"
-                  }</span>
-                </div>
-                <button id="choose-seats-btn" type="button" class="${
-                  seatsAdded
-                    ? "px-5 py-2 rounded-full bg-pill-done-bg text-pill-done-text border-[1.5px] border-pill-done-text font-title-md text-body-md font-semibold transition-all"
-                    : "px-5 py-2 rounded-full border-[1.5px] border-primary-container text-primary-container font-title-md text-body-md font-semibold hover:bg-primary-container/5 transition-all"
-                }">
-                  ${seatsAdded ? "Seats 12A–12D ✓" : "Choose seats"}
-                </button>
-              </div>
+              <button type="button" data-drawer-item="${d.product_id}" class="${
+                        dSel
+                          ? "px-4 py-2 rounded-full bg-pill-done-bg text-pill-done-text border-[1.5px] border-pill-done-text font-semibold text-xs"
+                          : "px-4 py-2 rounded-full border-[1.5px] border-primary-container text-primary-container font-semibold text-xs"
+                      }">
+                ${dSel ? "Added ✓" : d.cta_label || "Add"}
+              </button>
             </div>
-            `
+                      `;
+                    })
+                    .join("")
                 : ""
             }
           </div>
+          `
+              : ""
+          }
 
           <!-- First-Class Decline / Continue Action (Equal Visual Weight) -->
           <div class="w-full flex flex-col items-center">
-            <button id="screen-a-continue" type="button" class="w-full py-3.5 px-space-lg rounded-full border-[1.5px] border-primary-container text-primary-container font-title-md text-title-md font-semibold flex items-center justify-center gap-space-sm hover:bg-primary-container/5 active:scale-[0.99] transition-all">
+            <button id="offer-page-continue" type="button" class="w-full py-3.5 px-space-lg rounded-full border-[1.5px] border-primary-container text-primary-container font-title-md text-title-md font-semibold flex items-center justify-center gap-space-sm hover:bg-primary-container/5 active:scale-[0.99] transition-all">
               <span>${continueLabel}</span>
               <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
             </button>
@@ -596,37 +806,78 @@
     `;
   }
 
-  function bindScreenA() {
-    const backBtn = document.getElementById("screen-a-back");
+  function bindOfferPage(pageIndex) {
+    const s = state.sessionData;
+    const page = (s.pages && s.pages[pageIndex]) || (s.pages && s.pages[0]);
+    if (!page) return;
+    const screenKey = page.screen_id || (pageIndex === 0 ? "offer_page_1" : "offer_page_2");
+
+    const backBtn = document.getElementById("offer-page-back");
     if (backBtn) {
-      backBtn.addEventListener("click", () => {
-        state.currentScreen = "checkin_start";
-        renderCurrentScreen();
-      });
-    }
-
-    const whoLink = document.getElementById("choose-who-link");
-    if (whoLink) {
-      whoLink.addEventListener("click", () => {
-        showToast(
-          "Applies Priority & 2 Cabin Bags across all 4 passengers (Marta, Declan, Fia, Oisín) for €76.00."
-        );
-      });
-    }
-
-    const priorityBtn = document.getElementById("toggle-priority-btn");
-    if (priorityBtn) {
-      priorityBtn.addEventListener("click", async () => {
-        const currentlySelected = isProductSelected("priority_boarding");
+      backBtn.addEventListener("click", async () => {
+        if (pageIndex === 0) {
+          state.currentScreen = "checkin_start";
+          renderCurrentScreen();
+          return;
+        }
+        // Wiring Trap #2: Back arrow on Offer Page 2 returns to Offer Page 1, never Seat Map
         const mutation = await apiFetch(
           `/api/v1/checkin/sessions/${state.sessionId}/actions`,
           {
             method: "POST",
             body: JSON.stringify({
-              action: currentlySelected ? "remove_item" : "add",
-              current_screen: "offer_page_1",
-              product_id: "priority_boarding",
-              quantity: currentlySelected ? 0 : 1,
+              action: "navigate_back",
+              current_screen: screenKey,
+            }),
+          }
+        );
+        syncMutationResponse(mutation);
+        state.currentScreen = mutation.next_screen;
+        renderCurrentScreen();
+      });
+    }
+
+    document.querySelectorAll("[data-secondary-link]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const paxNames = (s.passengers || [])
+          .map((p) => p.full_name)
+          .join(", ");
+        showToast(
+          `Applies across all ${(s.passengers || []).length} passengers (${paxNames}) for this flight.`
+        );
+      });
+    });
+
+    document.querySelectorAll("[data-seat-trigger]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        state.seatMapData = await apiFetch(
+          `/api/v1/checkin/sessions/${state.sessionId}/seat-map`
+        );
+        if (
+          state.seatMapData &&
+          state.seatMapData.recommended_seats &&
+          state.seatMapData.recommended_seats.length > 0
+        ) {
+          state.selectedSeats = state.seatMapData.recommended_seats.slice();
+        }
+        state.currentScreen = "seat_map";
+        renderCurrentScreen();
+      });
+    });
+
+    document.querySelectorAll("[data-card-toggle]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const pid = btn.getAttribute("data-card-toggle");
+        const currentQty = getProductQuantity(pid);
+        const mutation = await apiFetch(
+          `/api/v1/checkin/sessions/${state.sessionId}/actions`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              action: currentQty > 0 ? "remove_item" : "add",
+              current_screen: screenKey,
+              product_id: pid,
+              quantity: currentQty > 0 ? 0 : 1,
             }),
           }
         );
@@ -634,32 +885,87 @@
         await refreshAnalytics();
         renderCurrentScreen();
       });
-    }
+    });
 
-    const chooseSeatsBtn = document.getElementById("choose-seats-btn");
-    if (chooseSeatsBtn) {
-      chooseSeatsBtn.addEventListener("click", async () => {
-        state.seatMapData = await apiFetch(
-          `/api/v1/checkin/sessions/${state.sessionId}/seat-map`
-        );
-        state.currentScreen = "seat_map";
+    const updateStepperQty = async (pid, newQty) => {
+      const mutation = await apiFetch(
+        `/api/v1/checkin/sessions/${state.sessionId}/actions`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            action: newQty > 0 ? "add" : "update_quantity",
+            current_screen: screenKey,
+            product_id: pid,
+            quantity: newQty,
+          }),
+        }
+      );
+      syncMutationResponse(mutation);
+      await refreshAnalytics();
+      renderCurrentScreen();
+    };
+
+    document.querySelectorAll("[data-qty-inc]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const pid = btn.getAttribute("data-qty-inc");
+        const cur = getProductQuantity(pid);
+        if (cur < 4) updateStepperQty(pid, cur + 1);
+      });
+    });
+
+    document.querySelectorAll("[data-qty-dec]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const pid = btn.getAttribute("data-qty-dec");
+        const cur = getProductQuantity(pid);
+        if (cur > 0) updateStepperQty(pid, cur - 1);
+      });
+    });
+
+    const drawerBtn = document.getElementById("drawer-toggle-btn");
+    if (drawerBtn) {
+      drawerBtn.addEventListener("click", () => {
+        state.drawerExpanded = !state.drawerExpanded;
         renderCurrentScreen();
       });
     }
 
-    const continueBtn = document.getElementById("screen-a-continue");
-    if (continueBtn) {
-      continueBtn.addEventListener("click", async () => {
-        const hasSelection =
-          isProductSelected("priority_boarding") ||
-          isProductSelected("reserved_seats");
+    document.querySelectorAll("[data-drawer-item]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const pid = btn.getAttribute("data-drawer-item");
+        const selected = isProductSelected(pid);
         const mutation = await apiFetch(
           `/api/v1/checkin/sessions/${state.sessionId}/actions`,
           {
             method: "POST",
             body: JSON.stringify({
-              action: hasSelection ? "continue" : "decline_page",
-              current_screen: "offer_page_1",
+              action: selected ? "remove_item" : "add",
+              current_screen: screenKey,
+              product_id: pid,
+              quantity: selected ? 0 : 1,
+            }),
+          }
+        );
+        syncMutationResponse(mutation);
+        await refreshAnalytics();
+        renderCurrentScreen();
+      });
+    });
+
+    const continueBtn = document.getElementById("offer-page-continue");
+    if (continueBtn) {
+      continueBtn.addEventListener("click", async () => {
+        const cards = page.cards || [];
+        const drawers = page.drawer_items || [];
+        const hasSelectionOnPage =
+          cards.some((c) => isProductSelected(c.product_id)) ||
+          drawers.some((d) => isProductSelected(d.product_id));
+        const mutation = await apiFetch(
+          `/api/v1/checkin/sessions/${state.sessionId}/actions`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              action: hasSelectionOnPage ? "continue" : "decline_page",
+              current_screen: screenKey,
             }),
           }
         );
@@ -672,9 +978,73 @@
   }
 
   /* ==========================================================================
-   * SCREEN F — Seat Map (No Step Number, No Urgency Timer, No Row 14, Child Exit Row Rule)
+   * SCREEN F — Seat Map (Grounded in state.seatMapData: rows, recommended_seats, child rules)
    * ========================================================================== */
+  function renderSeatCell(seat, passengers) {
+    const selectedIdx = state.selectedSeats.indexOf(seat.designator);
+    const isSelected = selectedIdx !== -1;
+
+    if (isSelected) {
+      const pax = passengers[selectedIdx] || {};
+      const shortName = ((pax.full_name || pax.display_name || "Guest").split(" ")[0]);
+      return `
+        <button type="button" data-seat-select="${seat.designator}" class="h-11 rounded-lg bg-secondary-container text-on-secondary-fixed flex flex-col items-center justify-center shadow-sm transition-transform active:scale-95">
+          <span class="text-[12px] font-bold leading-tight">${seat.designator}</span>
+          <span class="text-[9px] uppercase font-bold truncate max-w-[44px]">${shortName}</span>
+        </button>
+      `;
+    }
+
+    if (seat.status === "occupied") {
+      return `
+        <div class="h-9 rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant/40">
+          <span class="material-symbols-outlined text-[14px]">close</span>
+        </div>
+      `;
+    }
+
+    if (seat.status === "blocked_child_rule") {
+      return `
+        <button type="button" class="child-restricted-seat h-9 rounded-lg bg-surface-variant flex flex-col items-center justify-center text-on-surface-variant cursor-not-allowed" data-seat="${
+          seat.designator
+        }" data-reason="${seat.restriction_reason || "Exit row unavailable with children under 16"}">
+          <span class="font-label-sm leading-none">${seat.designator}</span>
+          <span class="text-[8px]">Restricted</span>
+        </button>
+      `;
+    }
+
+    // Available or unselected recommended seat
+    return `
+      <button type="button" data-seat-select="${seat.designator}" class="h-9 rounded-lg bg-surface-container-low hover:bg-pill-next-bg flex flex-col items-center justify-center text-primary-container transition-colors">
+        <span class="font-label-sm leading-none font-bold">${seat.designator}</span>
+        <span class="text-[9px] text-text-body">€${Math.round(seat.price_eur || 6)}</span>
+      </button>
+    `;
+  }
+
   function renderScreenF() {
+    const s = state.sessionData || {};
+    const booking = s.booking || {};
+    const passengers = s.passengers || [];
+    const seatMap = state.seatMapData || {
+      aircraft: "Boeing 737-800",
+      recommended_row: 12,
+      recommended_seats: ["12A", "12B", "12C", "12D"],
+      unit_price_eur: 6.0,
+      total_price_eur: 24.0,
+      assistant_panel: {
+        heading: "I've found 4 seats together",
+        supporting_text: "Row 12, near the front.",
+      },
+      rows: [],
+    };
+    const unitPrice = typeof seatMap.unit_price_eur === "number" ? seatMap.unit_price_eur : 6.0;
+    const totalPrice = (state.selectedSeats.length * unitPrice).toFixed(2);
+    const activeRows = Array.from(
+      new Set(state.selectedSeats.map((d) => d.replace(/[A-F]/g, "")))
+    ).join(", ");
+
     return `
       <div class="flex flex-col w-full pb-4">
         <!-- Compact Navy Header (Sub-screen of Offer Page 1: NO step number) -->
@@ -687,65 +1057,44 @@
             <span class="w-9"></span>
           </div>
           <p class="font-body-sm text-body-sm text-primary-fixed text-center flex items-center justify-center gap-1.5 flex-wrap">
-            <span>Dublin to Faro</span>
+            <span>${booking.origin_name || "Dublin"} to ${booking.destination_name || "Faro"}</span>
             <span>•</span>
-            <span>Flight FR1234</span>
+            <span>Flight ${booking.flight_number || "FR1234"}</span>
             <span>•</span>
-            <span>Boeing 737-800</span>
+            <span>${seatMap.aircraft || "Boeing 737-800"}</span>
           </p>
         </div>
 
         <div class="px-margin flex flex-col gap-space-md -mt-2 pt-3">
-          <!-- Passenger Selection Bar -->
+          <!-- Passenger Selection Bar (Grounded in sessionData.passengers & state.selectedSeats) -->
           <div class="bg-surface-container-lowest rounded-xl p-3 shadow-sm border border-border-hairline flex flex-col gap-2.5">
             <div class="flex items-center justify-between">
-              <span class="font-label-sm text-label-sm text-text-body uppercase tracking-wider">Party of 4 (Byrne Family)</span>
+              <span class="font-label-sm text-label-sm text-text-body uppercase tracking-wider">Party of ${passengers.length} (PNR ${booking.booking_reference || "X8Y9QL"})</span>
               <span class="font-label-sm text-label-sm text-pill-done-text bg-pill-done-bg px-2 py-0.5 rounded-full flex items-center gap-1">
                 <span class="material-symbols-outlined text-[13px]">check_circle</span>
                 All seated together
               </span>
             </div>
             <div class="grid grid-cols-2 gap-2">
+              ${passengers
+                .map((p, idx) => {
+                  const firstName = (p.full_name || p.display_name || "Guest").split(" ")[0];
+                  const isChild = p.passenger_type === "child";
+                  const seatCode = state.selectedSeats[idx] || "—";
+                  return `
               <div class="flex items-center justify-between p-2 rounded-lg bg-secondary-container/20">
                 <div class="flex items-center gap-2 min-w-0">
-                  <div class="w-6 h-6 rounded-full bg-secondary-container text-on-secondary-fixed flex items-center justify-center font-label-md shrink-0 font-bold">M</div>
+                  <div class="w-6 h-6 rounded-full bg-secondary-container text-on-secondary-fixed flex items-center justify-center font-label-md shrink-0 font-bold">${firstName.charAt(0)}</div>
                   <div class="truncate">
-                    <p class="font-title-md text-text-heading truncate text-[13px] leading-tight">Marta</p>
-                    <p class="font-body-sm text-text-body text-[11px] leading-tight">Adult</p>
+                    <p class="font-title-md text-text-heading truncate text-[13px] leading-tight">${firstName}${isChild ? ` (${p.age}y)` : ""}</p>
+                    <p class="font-body-sm text-text-body text-[11px] leading-tight">${isChild ? "Child" : "Adult"}</p>
                   </div>
                 </div>
-                <span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-fixed text-[13px] font-bold">12A</span>
+                <span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-fixed text-[13px] font-bold">${seatCode}</span>
               </div>
-              <div class="flex items-center justify-between p-2 rounded-lg bg-secondary-container/20">
-                <div class="flex items-center gap-2 min-w-0">
-                  <div class="w-6 h-6 rounded-full bg-secondary-container text-on-secondary-fixed flex items-center justify-center font-label-md shrink-0 font-bold">D</div>
-                  <div class="truncate">
-                    <p class="font-title-md text-text-heading truncate text-[13px] leading-tight">Declan</p>
-                    <p class="font-body-sm text-text-body text-[11px] leading-tight">Adult</p>
-                  </div>
-                </div>
-                <span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-fixed text-[13px] font-bold">12B</span>
-              </div>
-              <div class="flex items-center justify-between p-2 rounded-lg bg-secondary-container/20">
-                <div class="flex items-center gap-2 min-w-0">
-                  <div class="w-6 h-6 rounded-full bg-secondary-container text-on-secondary-fixed flex items-center justify-center font-label-md shrink-0 font-bold">F</div>
-                  <div class="truncate">
-                    <p class="font-title-md text-text-heading truncate text-[13px] leading-tight">Fia (6y)</p>
-                    <p class="font-body-sm text-text-body text-[11px] leading-tight">Child</p>
-                  </div>
-                </div>
-                <span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-fixed text-[13px] font-bold">12C</span>
-              </div>
-              <div class="flex items-center justify-between p-2 rounded-lg bg-secondary-container/20">
-                <div class="flex items-center gap-2 min-w-0">
-                  <div class="w-6 h-6 rounded-full bg-secondary-container text-on-secondary-fixed flex items-center justify-center font-label-md shrink-0 font-bold">O</div>
-                  <div class="truncate">
-                    <p class="font-title-md text-text-heading truncate text-[13px] leading-tight">Oisín (9y)</p>
-                    <p class="font-body-sm text-text-body text-[11px] leading-tight">Child</p>
-                  </div>
-                </div>
-                <span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-fixed text-[13px] font-bold">12D</span>
-              </div>
+                  `;
+                })
+                .join("")}
             </div>
           </div>
 
@@ -756,8 +1105,8 @@
                 <span class="material-symbols-outlined text-surface-page text-[18px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
               </div>
               <div class="flex-1">
-                <h2 class="font-title-md text-title-md text-[#4B2EDB] font-bold">I've found 4 seats together</h2>
-                <p class="font-body-sm text-body-sm text-text-body mt-0.5">Row 12, near the front. Marta &amp; Declan with children Fia &amp; Oisín seated together.</p>
+                <h2 class="font-title-md text-title-md text-[#4B2EDB] font-bold">${seatMap.assistant_panel.heading}</h2>
+                <p class="font-body-sm text-body-sm text-text-body mt-0.5">${seatMap.assistant_panel.supporting_text} Tap any available seat below to adjust.</p>
               </div>
             </div>
             <div class="flex items-center gap-2 pt-1 font-label-sm text-label-sm text-pill-done-text bg-surface-page/80 px-2.5 py-1.5 rounded-lg">
@@ -766,114 +1115,63 @@
             </div>
           </div>
 
-          <!-- Cabin Seat Map Card (Sanitized: Row 14 excluded; Exit Row 16 greyed for children) -->
+          <!-- Cabin Seat Map Card (Grounded in state.seatMapData.rows; Row 14 excluded) -->
           <div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm border border-border-hairline flex flex-col items-center">
             <div class="w-full grid grid-cols-7 gap-1 text-center font-label-sm text-label-sm text-text-body py-1.5 mb-2 bg-surface-container-low rounded-lg">
               <span>A</span><span>B</span><span>C</span><span class="text-on-surface-variant/50">AISLE</span><span>D</span><span>E</span><span>F</span>
             </div>
 
             <div class="w-full flex flex-col gap-2">
-              <!-- Row 11 -->
-              <div class="grid grid-cols-7 gap-1.5 items-center">
-                <div class="h-9 rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant/40"><span class="material-symbols-outlined text-[14px]">close</span></div>
-                <div class="h-9 rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant/40"><span class="material-symbols-outlined text-[14px]">close</span></div>
-                <div class="h-9 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container"><span class="font-label-sm leading-none font-bold">11C</span><span class="text-[9px] text-text-body">€6</span></div>
-                <div class="h-9 flex items-center justify-center font-label-md text-text-body font-bold">11</div>
-                <div class="h-9 rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant/40"><span class="material-symbols-outlined text-[14px]">close</span></div>
-                <div class="h-9 rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant/40"><span class="material-symbols-outlined text-[14px]">close</span></div>
-                <div class="h-9 rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant/40"><span class="material-symbols-outlined text-[14px]">close</span></div>
-              </div>
-
-              <!-- Row 12 Badge -->
-              <div class="w-full flex justify-center -mb-0.5 mt-1">
-                <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-secondary-fixed shadow-sm">
-                  <span class="material-symbols-outlined text-[14px]">stars</span>
-                  <span class="font-label-sm text-label-sm font-bold tracking-wide">Best row for your group</span>
-                </div>
-              </div>
-
-              <!-- Row 12 (RECOMMENDED 12A-12D) -->
-              <div class="grid grid-cols-7 gap-1.5 items-center p-1 rounded-xl bg-secondary-container/20">
-                <div class="h-11 rounded-lg bg-secondary-container text-on-secondary-fixed flex flex-col items-center justify-center shadow-sm">
-                  <span class="text-[12px] font-bold leading-tight">12A</span>
-                  <span class="text-[9px] uppercase font-bold">Marta</span>
-                </div>
-                <div class="h-11 rounded-lg bg-secondary-container text-on-secondary-fixed flex flex-col items-center justify-center shadow-sm">
-                  <span class="text-[12px] font-bold leading-tight">12B</span>
-                  <span class="text-[9px] uppercase font-bold">Declan</span>
-                </div>
-                <div class="h-11 rounded-lg bg-secondary-container text-on-secondary-fixed flex flex-col items-center justify-center shadow-sm">
-                  <span class="text-[12px] font-bold leading-tight">12C</span>
-                  <span class="text-[9px] uppercase font-bold">Fia</span>
-                </div>
-                <div class="h-11 flex items-center justify-center text-primary-container font-bold text-[15px]">12</div>
-                <div class="h-11 rounded-lg bg-secondary-container text-on-secondary-fixed flex flex-col items-center justify-center shadow-sm">
-                  <span class="text-[12px] font-bold leading-tight">12D</span>
-                  <span class="text-[9px] uppercase font-bold">Oisín</span>
-                </div>
-                <div class="h-11 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container">
-                  <span class="font-label-sm leading-tight font-bold">12E</span>
-                  <span class="text-[9px] text-text-body">€6</span>
-                </div>
-                <div class="h-11 rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant/40">
-                  <span class="material-symbols-outlined text-[14px]">close</span>
-                </div>
-              </div>
-
-              <!-- Row 13 -->
-              <div class="grid grid-cols-7 gap-1.5 items-center">
-                <div class="h-9 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container"><span class="font-label-sm leading-none font-bold">13A</span><span class="text-[9px] text-text-body">€6</span></div>
-                <div class="h-9 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container"><span class="font-label-sm leading-none font-bold">13B</span><span class="text-[9px] text-text-body">€6</span></div>
-                <div class="h-9 rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant/40"><span class="material-symbols-outlined text-[14px]">close</span></div>
-                <div class="h-9 flex items-center justify-center font-label-md text-text-body font-bold">13</div>
-                <div class="h-9 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container"><span class="font-label-sm leading-none font-bold">13D</span><span class="text-[9px] text-text-body">€6</span></div>
-                <div class="h-9 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container"><span class="font-label-sm leading-none font-bold">13E</span><span class="text-[9px] text-text-body">€6</span></div>
-                <div class="h-9 rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant/40"><span class="material-symbols-outlined text-[14px]">close</span></div>
-              </div>
-
-              <!-- Row 15 (Row 14 omitted per Consistency Contract) -->
-              <div class="grid grid-cols-7 gap-1.5 items-center">
-                <div class="h-9 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container"><span class="font-label-sm leading-none font-bold">15A</span><span class="text-[9px] text-text-body">€6</span></div>
-                <div class="h-9 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container"><span class="font-label-sm leading-none font-bold">15B</span><span class="text-[9px] text-text-body">€6</span></div>
-                <div class="h-9 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container"><span class="font-label-sm leading-none font-bold">15C</span><span class="text-[9px] text-text-body">€6</span></div>
-                <div class="h-9 flex items-center justify-center font-label-md text-text-body font-bold">15</div>
-                <div class="h-9 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container"><span class="font-label-sm leading-none font-bold">15D</span><span class="text-[9px] text-text-body">€6</span></div>
-                <div class="h-9 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container"><span class="font-label-sm leading-none font-bold">15E</span><span class="text-[9px] text-text-body">€6</span></div>
-                <div class="h-9 rounded-lg bg-surface-container-low flex flex-col items-center justify-center text-primary-container"><span class="font-label-sm leading-none font-bold">15F</span><span class="text-[9px] text-text-body">€6</span></div>
-              </div>
-
-              <!-- Exit Row 16 (Child Seating Rule: Greyed out with tap reason) -->
-              <div class="w-full flex items-center justify-between py-1 px-2.5 my-0.5 rounded bg-surface-container-high text-text-body">
-                <span class="font-label-sm text-label-sm font-bold flex items-center gap-1">
-                  <span class="material-symbols-outlined text-[14px]">block</span>
-                  EXIT ROW 16 · UNAVAILABLE WITH CHILDREN (6Y, 9Y)
-                </span>
-              </div>
-              <div class="grid grid-cols-7 gap-1.5 items-center opacity-50">
-                ${["16A", "16B", "16C"]
-                  .map(
-                    (s) =>
-                      `<button type="button" class="child-restricted-seat h-9 rounded-lg bg-surface-variant flex flex-col items-center justify-center text-on-surface-variant cursor-not-allowed" data-seat="${s}"><span class="font-label-sm leading-none">${s}</span><span class="text-[8px]">Restricted</span></button>`
-                  )
-                  .join("")}
-                <div class="h-9 flex items-center justify-center font-label-md text-text-body font-bold">16</div>
-                ${["16D", "16E", "16F"]
-                  .map(
-                    (s) =>
-                      `<button type="button" class="child-restricted-seat h-9 rounded-lg bg-surface-variant flex flex-col items-center justify-center text-on-surface-variant cursor-not-allowed" data-seat="${s}"><span class="font-label-sm leading-none">${s}</span><span class="text-[8px]">Restricted</span></button>`
-                  )
-                  .join("")}
-              </div>
+              ${(seatMap.rows || [])
+                .map((row) => {
+                  const leftSeats = (row.seats || []).slice(0, 3);
+                  const rightSeats = (row.seats || []).slice(3, 6);
+                  const isRecRow = row.row_number === seatMap.recommended_row;
+                  return `
+                    ${
+                      row.badge && !row.is_exit_row
+                        ? `
+                    <div class="w-full flex justify-center -mb-0.5 mt-1">
+                      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-secondary-fixed shadow-sm">
+                        <span class="material-symbols-outlined text-[14px]">stars</span>
+                        <span class="font-label-sm text-label-sm font-bold tracking-wide">${row.badge}</span>
+                      </div>
+                    </div>
+                    `
+                        : ""
+                    }
+                    ${
+                      row.is_exit_row
+                        ? `
+                    <div class="w-full flex items-center justify-between py-1 px-2.5 my-0.5 rounded bg-surface-container-high text-text-body">
+                      <span class="font-label-sm text-label-sm font-bold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[14px]">block</span>
+                        EXIT ROW ${row.row_number} · ${row.badge || "UNAVAILABLE WITH CHILDREN"}
+                      </span>
+                    </div>
+                    `
+                        : ""
+                    }
+                    <div class="grid grid-cols-7 gap-1.5 items-center ${
+                      isRecRow ? "p-1 rounded-xl bg-secondary-container/20" : ""
+                    } ${row.is_exit_row ? "opacity-55" : ""}">
+                      ${leftSeats.map((sItem) => renderSeatCell(sItem, passengers)).join("")}
+                      <div class="h-9 flex items-center justify-center font-label-md text-text-body font-bold">${row.row_number}</div>
+                      ${rightSeats.map((sItem) => renderSeatCell(sItem, passengers)).join("")}
+                    </div>
+                  `;
+                })
+                .join("")}
             </div>
           </div>
 
           <!-- Sticky Confirm Bar -->
           <div class="bg-surface-page rounded-2xl p-3.5 shadow-md border border-border-hairline flex items-center justify-between mt-1">
             <div class="flex flex-col">
-              <span class="font-label-sm text-label-sm text-text-body uppercase tracking-wider">4 seats · Row 12</span>
+              <span class="font-label-sm text-label-sm text-text-body uppercase tracking-wider">${state.selectedSeats.length} seats · Row ${activeRows}</span>
               <div class="flex items-baseline gap-1">
-                <span class="font-headline-sm text-headline-sm text-text-heading leading-tight">€24.00</span>
-                <span class="font-body-sm text-body-sm text-text-body">(@ €6.00)</span>
+                <span class="font-headline-sm text-headline-sm text-text-heading leading-tight">€${totalPrice}</span>
+                <span class="font-body-sm text-body-sm text-text-body">(@ €${unitPrice.toFixed(2)})</span>
               </div>
             </div>
             <button id="confirm-seats-btn" type="button" class="bg-primary hover:bg-primary-container text-on-primary px-6 py-3 rounded-full font-title-md text-title-md flex items-center gap-2 shadow-md transition-all active:scale-[0.98]">
@@ -897,9 +1195,30 @@
 
     document.querySelectorAll(".child-restricted-seat").forEach((btn) => {
       btn.addEventListener("click", () => {
+        const reason = btn.getAttribute("data-reason");
         showToast(
-          "Safety rule: Emergency exit row 16 cannot accommodate children under 16 (Fia, 6 and Oisín, 9)."
+          `Safety rule: ${reason || "Emergency exit row 16 cannot accommodate children under 16."}`
         );
+      });
+    });
+
+    document.querySelectorAll("[data-seat-select]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const designator = btn.getAttribute("data-seat-select");
+        if (!designator) return;
+        const existingIdx = state.selectedSeats.indexOf(designator);
+        if (existingIdx !== -1) {
+          showToast(
+            `Seat ${designator} is currently assigned to passenger #${existingIdx + 1}. Tap any open seat to move.`
+          );
+          return;
+        }
+        // Rotate replacement into the last passenger slot
+        const updated = state.selectedSeats.slice();
+        updated[updated.length - 1] = designator;
+        updated.sort();
+        state.selectedSeats = updated;
+        renderCurrentScreen();
       });
     });
 
@@ -912,287 +1231,11 @@
           {
             method: "POST",
             body: JSON.stringify({
-              seat_designators: ["12A", "12B", "12C", "12D"],
+              seat_designators: state.selectedSeats,
             }),
           }
         );
         syncMutationResponse(mutation);
-        state.currentScreen = mutation.next_screen;
-        await refreshAnalytics();
-        renderCurrentScreen();
-      });
-    }
-  }
-
-  /* ==========================================================================
-   * SCREEN B — Offer Page 2 ("Step 2 of 2", Sanitized Copy + Expandable Car Hire Drawer)
-   * ========================================================================== */
-  function renderScreenB() {
-    const s = state.sessionData;
-    const page = (s.pages && s.pages[1]) || {
-      step_indicator: "Step 2 of 2",
-      assistant_panel: {
-        heading: "Most families on this route add a bag",
-        supporting_text: "7 nights, 4 travellers.",
-      },
-      drawer_label: "More extras (1)",
-      drawer_items: [
-        {
-          product_id: "car_hire",
-          title: "Car hire in Faro",
-          description: "Pick up at Faro Airport (FAO) · Free cancellation",
-          price_label: "From €28.00/day",
-          price_eur: 28.0,
-        },
-      ],
-    };
-
-    const bagCount = getProductQuantity("checked_bag_20kg");
-    const carSelected = isProductSelected("car_hire");
-    const hasAnySelection = bagCount > 0 || carSelected;
-
-    return `
-      <div class="flex flex-col w-full pb-8">
-        <!-- Compact Brand Navy Header -->
-        <div class="bg-primary-container px-margin py-3.5 rounded-b-[24px] shadow-sm flex items-center justify-between text-on-primary">
-          <button id="screen-b-back" type="button" aria-label="Back to Offer Page 1" class="w-9 h-9 flex items-center justify-start text-on-primary hover:opacity-80">
-            <span class="material-symbols-outlined text-[24px]">arrow_back</span>
-          </button>
-          <h1 class="font-title-md text-title-md font-bold text-on-primary text-center flex-1">Check in</h1>
-          <span class="font-label-md text-label-md text-on-primary/90 text-right min-w-[72px]">${page.step_indicator}</span>
-        </div>
-
-        <div class="px-margin flex flex-col gap-space-lg pt-space-lg">
-          <!-- Section Heading (Sanitized: "for this flight", not "for your return journey") -->
-          <div class="flex flex-col items-start gap-1">
-            <h2 class="font-headline-sm text-headline-sm text-text-heading">Anything in the hold?</h2>
-            <p class="font-body-sm text-body-sm text-text-body">
-              Customise your checked luggage allowance for this flight.
-            </p>
-          </div>
-
-          <!-- Lavender Assistant Insight Panel (Sanitized: Garbled refund line removed) -->
-          <div class="rounded-[18px] bg-surface-ai p-space-md flex flex-col gap-space-md shadow-sm">
-            <div class="flex items-start gap-space-sm">
-              <div class="w-9 h-9 rounded-full bg-[#4B2EDB] flex items-center justify-center shrink-0 shadow-sm">
-                <span class="material-symbols-outlined text-on-primary text-[19px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
-              </div>
-              <div class="flex flex-col pt-0.5">
-                <h3 class="font-title-md text-title-md text-[#4B2EDB] font-bold">${page.assistant_panel.heading}</h3>
-                <span class="font-body-sm text-body-sm text-text-body mt-0.5">${page.assistant_panel.supporting_text}</span>
-              </div>
-            </div>
-
-            <!-- Card C: 20kg Checked Bag -->
-            <div class="bg-surface-page rounded-xl p-space-md border border-border-hairline flex flex-col gap-space-md shadow-sm">
-              <div class="flex items-start justify-between gap-space-sm">
-                <div class="flex items-start gap-space-sm">
-                  <div class="w-10 h-10 rounded-lg bg-surface-container-low flex items-center justify-center shrink-0">
-                    <span class="material-symbols-outlined text-primary text-[22px]">luggage</span>
-                  </div>
-                  <div class="flex flex-col">
-                    <span class="font-title-md text-title-md text-text-heading">20kg Checked Bag</span>
-                    <span class="font-body-sm text-body-sm text-text-body">Up to 119 × 119 × 81cm · Outbound flight</span>
-                  </div>
-                </div>
-                <div class="text-right shrink-0">
-                  <span class="text-[18px] font-bold text-text-heading">€39.99</span>
-                  <span class="block font-label-sm text-label-sm text-text-body font-normal">one way</span>
-                </div>
-              </div>
-
-              <!-- Quantity Stepper + Add Button -->
-              <div class="flex items-center justify-between pt-1">
-                <div class="flex items-center bg-surface-container-low rounded-full px-1.5 py-1">
-                  <button id="bag-dec-btn" type="button" aria-label="Decrease quantity" ${
-                    bagCount === 0 ? "disabled" : ""
-                  } class="w-7 h-7 rounded-full flex items-center justify-center text-outline transition-colors disabled:opacity-40 hover:bg-surface-page">
-                    <span class="material-symbols-outlined text-[16px]">remove</span>
-                  </button>
-                  <span id="bag-count-val" class="w-8 text-center font-title-md text-text-heading select-none">${bagCount}</span>
-                  <button id="bag-inc-btn" type="button" aria-label="Increase quantity" class="w-7 h-7 rounded-full flex items-center justify-center text-primary transition-colors hover:bg-surface-page">
-                    <span class="material-symbols-outlined text-[16px]">add</span>
-                  </button>
-                </div>
-                <button id="bag-toggle-btn" type="button" class="${
-                  bagCount > 0
-                    ? "px-5 py-2 rounded-full bg-pill-done-bg text-pill-done-text border-[1.5px] border-pill-done-text font-title-md text-body-md font-semibold transition-all"
-                    : "px-5 py-2 rounded-full border-[1.5px] border-primary-container text-primary-container font-title-md text-body-md font-semibold hover:bg-primary-container/5 transition-all"
-                }">
-                  ${bagCount > 0 ? `Selected (${bagCount}) ✓` : "Add"}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Collapsed Demotion Drawer: "More extras (1)" -> Expands in place to Car hire in Faro -->
-          <div class="flex flex-col rounded-xl border border-border-hairline bg-surface-page shadow-sm overflow-hidden">
-            <button id="drawer-toggle-btn" type="button" class="w-full p-space-md flex items-center justify-between hover:bg-surface-container-low/60 transition-colors">
-              <div class="flex items-center gap-space-sm">
-                <div class="w-8 h-8 rounded-full bg-surface-container-low flex items-center justify-center">
-                  <span class="material-symbols-outlined text-primary text-[18px]">directions_car</span>
-                </div>
-                <div class="flex flex-col items-start">
-                  <span class="font-body-md text-body-md font-semibold text-text-heading">${
-                    page.drawer_label || "More extras (1)"
-                  }</span>
-                  <span class="font-body-sm text-body-sm text-text-body">Car hire in Faro (score 0.29 · demoted to drawer)</span>
-                </div>
-              </div>
-              <span class="material-symbols-outlined text-outline text-[20px] transition-transform ${
-                state.drawerExpanded ? "rotate-90" : ""
-              }">chevron_right</span>
-            </button>
-
-            ${
-              state.drawerExpanded
-                ? `
-            <div class="px-space-md pb-space-md pt-2 border-t border-border-hairline bg-surface-container-low/40 flex items-center justify-between gap-3">
-              <div class="flex flex-col">
-                <span class="font-title-md text-text-heading">Car hire in Faro (FAO)</span>
-                <span class="font-body-sm text-text-body">Pick up at terminal · Free cancellation</span>
-                <span class="font-title-md text-text-heading font-bold mt-1">€28.00 <span class="font-body-sm font-normal text-text-body">/ day</span></span>
-              </div>
-              <button id="car-hire-toggle-btn" type="button" class="${
-                carSelected
-                  ? "px-4 py-2 rounded-full bg-pill-done-bg text-pill-done-text border-[1.5px] border-pill-done-text font-semibold text-xs"
-                  : "px-4 py-2 rounded-full border-[1.5px] border-primary-container text-primary-container font-semibold text-xs"
-              }">
-                ${carSelected ? "Added ✓" : "Add"}
-              </button>
-            </div>
-            `
-                : ""
-            }
-          </div>
-
-          <!-- First-Class Decline / Continue Button -->
-          <div class="flex flex-col gap-space-sm pt-1">
-            <button id="screen-b-continue" type="button" class="w-full rounded-full py-3.5 px-6 text-center font-title-md text-title-md border-[1.5px] border-primary-container text-primary-container bg-surface-page hover:bg-primary-container/5 active:scale-[0.99] transition-all flex items-center justify-center gap-space-xs">
-              <span>${
-                hasAnySelection
-                  ? `Confirm &amp; Continue (${bagCount > 0 ? `${bagCount} bag` : "extras"})`
-                  : "No thanks, continue"
-              }</span>
-              <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  function bindScreenB() {
-    const backBtn = document.getElementById("screen-b-back");
-    if (backBtn) {
-      backBtn.addEventListener("click", async () => {
-        // Wiring Trap #2: Back arrow on Offer Page 2 goes to Offer Page 1, never Seat Map
-        const mutation = await apiFetch(
-          `/api/v1/checkin/sessions/${state.sessionId}/actions`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              action: "navigate_back",
-              current_screen: "offer_page_2",
-            }),
-          }
-        );
-        syncMutationResponse(mutation);
-        state.currentScreen = mutation.next_screen;
-        renderCurrentScreen();
-      });
-    }
-
-    const updateBagQty = async (newQty) => {
-      const mutation = await apiFetch(
-        `/api/v1/checkin/sessions/${state.sessionId}/actions`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            action: newQty > 0 ? "add" : "update_quantity",
-            current_screen: "offer_page_2",
-            product_id: "checked_bag_20kg",
-            quantity: newQty,
-          }),
-        }
-      );
-      syncMutationResponse(mutation);
-      await refreshAnalytics();
-      renderCurrentScreen();
-    };
-
-    const incBtn = document.getElementById("bag-inc-btn");
-    if (incBtn) {
-      incBtn.addEventListener("click", () => {
-        const current = getProductQuantity("checked_bag_20kg");
-        if (current < 4) updateBagQty(current + 1);
-      });
-    }
-
-    const decBtn = document.getElementById("bag-dec-btn");
-    if (decBtn) {
-      decBtn.addEventListener("click", () => {
-        const current = getProductQuantity("checked_bag_20kg");
-        if (current > 0) updateBagQty(current - 1);
-      });
-    }
-
-    const bagToggle = document.getElementById("bag-toggle-btn");
-    if (bagToggle) {
-      bagToggle.addEventListener("click", () => {
-        const current = getProductQuantity("checked_bag_20kg");
-        updateBagQty(current === 0 ? 1 : 0);
-      });
-    }
-
-    const drawerBtn = document.getElementById("drawer-toggle-btn");
-    if (drawerBtn) {
-      drawerBtn.addEventListener("click", () => {
-        state.drawerExpanded = !state.drawerExpanded;
-        renderCurrentScreen();
-      });
-    }
-
-    const carBtn = document.getElementById("car-hire-toggle-btn");
-    if (carBtn) {
-      carBtn.addEventListener("click", async () => {
-        const selected = isProductSelected("car_hire");
-        const mutation = await apiFetch(
-          `/api/v1/checkin/sessions/${state.sessionId}/actions`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              action: selected ? "remove_item" : "add",
-              current_screen: "offer_page_2",
-              product_id: "car_hire",
-              quantity: selected ? 0 : 1,
-            }),
-          }
-        );
-        syncMutationResponse(mutation);
-        await refreshAnalytics();
-        renderCurrentScreen();
-      });
-    }
-
-    const continueBtn = document.getElementById("screen-b-continue");
-    if (continueBtn) {
-      continueBtn.addEventListener("click", async () => {
-        const hasBagOrCar =
-          getProductQuantity("checked_bag_20kg") > 0 ||
-          isProductSelected("car_hire");
-        const mutation = await apiFetch(
-          `/api/v1/checkin/sessions/${state.sessionId}/actions`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              action: hasBagOrCar ? "continue" : "decline_page",
-              current_screen: "offer_page_2",
-            }),
-          }
-        );
-        syncMutationResponse(mutation);
-        // Empty-basket skip rule: if basket is empty, backend sets next_screen = "boarding_passes"
         state.currentScreen = mutation.next_screen;
         await refreshAnalytics();
         renderCurrentScreen();
@@ -1204,18 +1247,24 @@
    * SCREEN D — Review & Pay (No Step Number, Dynamic Removable Line Items, Visa 4412)
    * ========================================================================== */
   function renderScreenD() {
+    const s = state.sessionData || {};
+    const booking = s.booking || {};
     const items = state.basketData.items || [];
     const iconMap = {
       priority_boarding: "luggage",
       reserved_seats: "airline_seat_recline_extra",
       checked_bag_20kg: "shopping_bag",
       car_hire: "directions_car",
+      fast_track: "bolt",
+      travel_insurance: "verified_user",
     };
     const subBadgeMap = {
       priority_boarding: "All guests",
       reserved_seats: "Together",
       checked_bag_20kg: "Hold luggage",
       car_hire: "Faro Airport",
+      fast_track: "Security lane",
+      travel_insurance: "Single flight",
     };
 
     return `
@@ -1223,13 +1272,13 @@
         <!-- Navy Header Accent Block (Checkout is NOT a step: no step number) -->
         <div class="bg-primary-container px-margin pt-3.5 pb-9 text-on-primary">
           <div class="flex items-center justify-between mb-1">
-            <button id="screen-d-back" type="button" aria-label="Back to Offer Page 2" class="w-9 h-9 -ml-1 flex items-center justify-start text-on-primary hover:opacity-80">
+            <button id="screen-d-back" type="button" aria-label="Back to Offer Page" class="w-9 h-9 -ml-1 flex items-center justify-start text-on-primary hover:opacity-80">
               <span class="material-symbols-outlined text-[24px]">arrow_back</span>
             </button>
-            <h1 class="font-headline-sm text-headline-sm text-on-primary flex-1 text-center">Review your extras</h1>
+            <h1 class="font-headline-sm text-headline-sm text-on-primary flex-1 text-center">${state.basketData.header_title || "Review your extras"}</h1>
             <span class="w-9"></span>
           </div>
-          <p class="font-body-sm text-body-sm text-on-primary-container text-center">Ryanair · FR1234 • Dublin (DUB) → Faro (FAO)</p>
+          <p class="font-body-sm text-body-sm text-on-primary-container text-center">${booking.airline || "Ryanair"} · ${booking.flight_number || "FR1234"} • ${booking.origin_name || "Dublin"} (${booking.origin_code || "DUB"}) → ${booking.destination_name || "Faro"} (${booking.destination_code || "FAO"})</p>
         </div>
 
         <div class="-mt-5 bg-surface-page rounded-t-[20px] px-margin pt-5 pb-6 flex flex-col gap-space-md shadow-sm">
@@ -1240,7 +1289,7 @@
             </div>
             <div class="flex-1 min-w-0">
               <p class="font-title-md text-title-md text-[#4B2EDB] font-bold leading-tight">Everything is in sync</p>
-              <p class="font-body-sm text-body-sm text-text-body mt-0.5">I've linked your selected extras across your family booking X8Y9QL.</p>
+              <p class="font-body-sm text-body-sm text-text-body mt-0.5">I've linked your selected extras across booking ${booking.booking_reference || "X8Y9QL"}.</p>
             </div>
           </div>
 
@@ -1308,7 +1357,7 @@
                   <span class="font-title-md text-title-md font-bold tracking-tighter italic">VISA</span>
                 </div>
                 <div class="min-w-0">
-                  <p class="font-title-md text-title-md text-text-heading truncate">Visa ending 4412</p>
+                  <p class="font-title-md text-title-md text-text-heading truncate">${state.basketData.saved_payment_method || "Visa ending 4412"}</p>
                   <p class="font-body-sm text-body-sm text-text-body">Expires 09/27 • Default card</p>
                 </div>
               </div>
@@ -1321,7 +1370,7 @@
           <!-- Primary Pay CTA -->
           <button id="pay-cta-btn" type="button" class="w-full bg-primary-container hover:bg-primary active:scale-[0.99] text-on-primary py-4 px-margin rounded-full flex items-center justify-center gap-space-sm shadow-md transition-all">
             <span class="material-symbols-outlined text-secondary-fixed text-[22px]">flight_takeoff</span>
-            <span class="font-title-md text-title-md font-bold text-on-primary">Pay and get boarding passes</span>
+            <span class="font-title-md text-title-md font-bold text-on-primary">${state.basketData.pay_cta_label || "Pay and get boarding passes"}</span>
             <span class="material-symbols-outlined text-[20px] text-on-primary">arrow_forward</span>
           </button>
         </div>
@@ -1383,10 +1432,17 @@
   }
 
   /* ==========================================================================
-   * SCREEN C — Zero-Offer State ("1 STEP", Full Greeting Header, Sanitized Flight Card)
+   * SCREEN C — Zero-Offer State ("1 STEP", Grounded in sessionData.zero_offer_panel & booking)
    * ========================================================================== */
   function renderScreenC() {
-    const panel = (state.sessionData && state.sessionData.zero_offer_panel) || {
+    const s = state.sessionData || {};
+    const booking = s.booking || {};
+    const passengers = s.passengers || [];
+    const lead =
+      passengers.find((p) => p.is_lead_booker) ||
+      passengers[0] || { full_name: "Marta Byrne", initials: "MB" };
+    const leadFirstName = (lead.full_name || "Marta").split(" ")[0];
+    const panel = s.zero_offer_panel || {
       heading: "You're all set",
       supporting_text: "Nothing else to add for this trip.",
     };
@@ -1406,11 +1462,11 @@
               <button aria-label="Notifications" type="button" class="w-9 h-9 flex items-center justify-center text-on-primary">
                 <span class="material-symbols-outlined text-[22px]">notifications</span>
               </button>
-              <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ring-2 ring-secondary-fixed text-on-primary font-bold text-xs">MB</div>
+              <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ring-2 ring-secondary-fixed text-on-primary font-bold text-xs">${lead.initials || "MB"}</div>
             </div>
           </div>
           <div class="px-margin pt-2 pb-6 flex flex-col">
-            <h1 class="font-headline-lg text-[28px] font-bold text-on-primary tracking-tight leading-tight">Hi Marta,</h1>
+            <h1 class="font-headline-lg text-[28px] font-bold text-on-primary tracking-tight leading-tight">Hi ${leadFirstName},</h1>
             <p class="font-body-md text-on-primary/80 mt-1">You're all set to fly</p>
           </div>
         </header>
@@ -1419,7 +1475,7 @@
           <!-- "1 STEP" Overline Pill -->
           <div class="inline-flex self-start items-center gap-1.5 px-3 py-1 rounded-full bg-pill-next-bg">
             <span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
-            <span class="font-label-sm text-label-sm uppercase tracking-wider text-primary-container font-bold">1 STEP</span>
+            <span class="font-label-sm text-label-sm uppercase tracking-wider text-primary-container font-bold">${s.entry_step_pill || "1 STEP"}</span>
           </div>
 
           <!-- Flight Entity Card (Sanitized: contradictory single-seat chip removed) -->
@@ -1430,8 +1486,8 @@
                   <span class="material-symbols-outlined text-[24px]">flight_takeoff</span>
                 </div>
                 <div class="flex flex-col min-w-0">
-                  <span class="font-title-md text-title-md text-text-heading font-semibold tracking-tight truncate">Dublin → Faro</span>
-                  <span class="font-body-sm text-body-sm text-text-body truncate">Tue 14 Oct · FR1234 · 06:35</span>
+                  <span class="font-title-md text-title-md text-text-heading font-semibold tracking-tight truncate">${booking.origin_name || "Dublin"} → ${booking.destination_name || "Faro"}</span>
+                  <span class="font-body-sm text-body-sm text-text-body truncate">${booking.departure_date_label || "Tue 14 Oct"} · ${booking.flight_number || "FR1234"} · ${booking.departure_time || "06:35"}</span>
                 </div>
               </div>
               <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-pill-done-bg text-pill-done-text font-label-md text-label-md font-semibold flex-shrink-0">
@@ -1442,9 +1498,9 @@
             <div class="mt-space-md pt-space-sm border-t border-border-hairline flex items-center justify-between text-body-sm text-text-body">
               <div class="flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-text-body text-[16px]">schedule</span>
-                <span class="font-body-sm">Terminal 1 · Gate 104 · Gate closes 06:05</span>
+                <span class="font-body-sm">${booking.origin_terminal || "Terminal 1"} · Gate ${booking.gate || "104"} · Gate closes ${booking.gate_closes_time || "06:05"}</span>
               </div>
-              <span class="font-label-md text-label-md text-text-body">4 passengers</span>
+              <span class="font-label-md text-label-md text-text-body">${passengers.length || 4} passengers</span>
             </div>
           </div>
 
@@ -1500,54 +1556,38 @@
   }
 
   /* ==========================================================================
-   * SCREEN G — Boarding Passes (Swipeable Stack of 4 Passes with Dynamic Badges)
+   * SCREEN G — Boarding Passes (Grounded in state.boardingPasses & sessionData.booking)
    * ========================================================================== */
   function renderScreenG() {
-    const passes =
-      state.boardingPasses && state.boardingPasses.length === 4
-        ? state.boardingPasses
-        : [
-            {
-              pass_index: 1,
-              passenger_name: "Marta Byrne",
-              seat: isProductSelected("reserved_seats") ? "12A" : null,
-              badges: [
-                ...(isProductSelected("priority_boarding") ? ["PRIORITY"] : []),
-                ...(isProductSelected("reserved_seats") ? ["12A"] : []),
-              ],
-            },
-            {
-              pass_index: 2,
-              passenger_name: "Declan Byrne",
-              seat: isProductSelected("reserved_seats") ? "12B" : null,
-              badges: [
-                ...(isProductSelected("priority_boarding") ? ["PRIORITY"] : []),
-                ...(isProductSelected("reserved_seats") ? ["12B"] : []),
-              ],
-            },
-            {
-              pass_index: 3,
-              passenger_name: "Fia Byrne",
-              seat: isProductSelected("reserved_seats") ? "12C" : null,
-              badges: [
-                ...(isProductSelected("priority_boarding") ? ["PRIORITY"] : []),
-                ...(isProductSelected("reserved_seats") ? ["12C"] : []),
-              ],
-            },
-            {
-              pass_index: 4,
-              passenger_name: "Oisín Byrne",
-              seat: isProductSelected("reserved_seats") ? "12D" : null,
-              badges: [
-                ...(isProductSelected("priority_boarding") ? ["PRIORITY"] : []),
-                ...(isProductSelected("reserved_seats") ? ["12D"] : []),
-              ],
-            },
-          ];
+    const s = state.sessionData || {};
+    const booking = s.booking || {};
+    const passengers = s.passengers || [];
+    const fallbackPasses = passengers.map((p, i) => {
+      const seat = isProductSelected("reserved_seats")
+        ? state.selectedSeats[i] || null
+        : null;
+      return {
+        pass_index: i + 1,
+        passenger_id: p.passenger_id,
+        passenger_name: p.full_name,
+        seat,
+        badges: [
+          ...(isProductSelected("priority_boarding") ? ["PRIORITY"] : []),
+          ...(seat ? [seat] : []),
+        ],
+        qr_payload: `RYR:${booking.booking_reference || "X8Y9QL"}:${booking.flight_number || "FR1234"}:${p.passenger_id}:${seat || "FREE"}`,
+      };
+    });
 
-    const idx = state.activePassIndex % passes.length;
+    const passes =
+      state.boardingPasses && state.boardingPasses.length > 0
+        ? state.boardingPasses
+        : fallbackPasses;
+
+    const totalPasses = passes.length || 1;
+    const idx = state.activePassIndex % totalPasses;
     const activePass = passes[idx];
-    const hasPriority = activePass.badges.includes("PRIORITY");
+    const hasPriority = (activePass.badges || []).includes("PRIORITY");
     const seatLabel = activePass.seat ? `Seat ${activePass.seat}` : "Seat at Gate";
 
     return `
@@ -1556,15 +1596,15 @@
         <div class="bg-primary-container text-on-primary rounded-b-3xl px-margin pt-4 pb-10 relative overflow-hidden shadow-sm">
           <div class="relative z-10 flex flex-col gap-space-xs">
             <div class="flex items-center justify-between">
-              <span class="font-label-sm text-label-sm uppercase tracking-wider text-primary-fixed">Family Booking · PNR: X8Y9QL</span>
-              <span class="bg-pill-done-bg text-pill-done-text px-2.5 py-0.5 rounded-full font-label-md text-label-md font-semibold">Gate 104</span>
+              <span class="font-label-sm text-label-sm uppercase tracking-wider text-primary-fixed">Booking · PNR: ${booking.booking_reference || "X8Y9QL"}</span>
+              <span class="bg-pill-done-bg text-pill-done-text px-2.5 py-0.5 rounded-full font-label-md text-label-md font-semibold">Gate ${booking.gate || "104"}</span>
             </div>
             <h1 class="font-headline-sm text-headline-sm text-on-primary tracking-tight mt-1">Boarding passes</h1>
-            <p class="font-body-sm text-body-sm text-primary-fixed">DUB → FAO · Flight FR1234 · Departs 06:35 (Boarding 05:55)</p>
+            <p class="font-body-sm text-body-sm text-primary-fixed">${booking.origin_code || "DUB"} → ${booking.destination_code || "FAO"} · Flight ${booking.flight_number || "FR1234"} · Departs ${booking.departure_time || "06:35"} (Boarding ${booking.boarding_time || "05:55"})</p>
           </div>
         </div>
 
-        <!-- Swipeable Stack of 4 Passes -->
+        <!-- Swipeable Stack of Passes -->
         <div class="px-margin -mt-6 relative z-20 flex flex-col items-center">
           <div class="w-full rounded-2xl bg-surface-page shadow-md border border-border-hairline overflow-hidden flex flex-col justify-between">
             <div class="p-space-lg flex flex-col gap-space-sm bg-gradient-to-b from-surface-ai/40 to-transparent">
@@ -1582,7 +1622,7 @@
                 </div>
                 <span class="font-label-md text-text-body font-semibold">${
                   idx + 1
-                } of 4</span>
+                } of ${totalPasses}</span>
               </div>
 
               <!-- Passenger Name -->
@@ -1596,17 +1636,17 @@
               <!-- Route Info -->
               <div class="flex items-center justify-between pt-1">
                 <div>
-                  <div class="font-headline-lg text-headline-lg text-primary leading-none">DUB</div>
-                  <div class="font-label-md text-label-md text-text-body mt-1">Dublin T1</div>
+                  <div class="font-headline-lg text-headline-lg text-primary leading-none">${booking.origin_code || "DUB"}</div>
+                  <div class="font-label-md text-label-md text-text-body mt-1">${booking.origin_name || "Dublin"} T1</div>
                 </div>
                 <div class="flex-1 flex flex-col items-center px-4">
-                  <span class="font-label-sm text-label-sm text-text-body mb-1">FR1234</span>
+                  <span class="font-label-sm text-label-sm text-text-body mb-1">${booking.flight_number || "FR1234"}</span>
                   <div class="w-full h-0.5 bg-surface-variant relative"></div>
-                  <span class="font-label-sm text-label-sm text-pill-next-text font-bold mt-1">06:35</span>
+                  <span class="font-label-sm text-label-sm text-pill-next-text font-bold mt-1">${booking.departure_time || "06:35"}</span>
                 </div>
                 <div class="text-right">
-                  <div class="font-headline-lg text-headline-lg text-primary leading-none">FAO</div>
-                  <div class="font-label-md text-label-md text-text-body mt-1">Faro</div>
+                  <div class="font-headline-lg text-headline-lg text-primary leading-none">${booking.destination_code || "FAO"}</div>
+                  <div class="font-label-md text-label-md text-text-body mt-1">${booking.destination_name || "Faro"}</div>
                 </div>
               </div>
 
@@ -1618,11 +1658,11 @@
                 </div>
                 <div class="text-center">
                   <span class="font-label-sm text-text-body block">Boarding</span>
-                  <span class="font-title-md text-pill-review-text font-bold">05:55</span>
+                  <span class="font-title-md text-pill-review-text font-bold">${booking.boarding_time || "05:55"}</span>
                 </div>
                 <div class="text-right">
                   <span class="font-label-sm text-text-body block">Gate closes</span>
-                  <span class="font-title-md text-primary font-bold">06:05</span>
+                  <span class="font-title-md text-primary font-bold">${booking.gate_closes_time || "06:05"}</span>
                 </div>
               </div>
             </div>
@@ -1646,11 +1686,11 @@
                 <rect fill="#002164" height="10" width="12" x="68" y="72"></rect>
                 <rect fill="#002164" height="8" width="16" x="40" y="76"></rect>
               </svg>
-              <span class="font-label-sm text-text-body mt-1">Scan at Gate 104 · PNR X8Y9QL</span>
+              <span class="font-label-sm text-text-body mt-1 font-mono text-[10px]">${activePass.qr_payload || `Scan at Gate ${booking.gate || "104"} · PNR ${booking.booking_reference || "X8Y9QL"}`}</span>
             </div>
           </div>
 
-          <!-- Pass Switcher Controls (1 of 4) -->
+          <!-- Pass Switcher Controls -->
           <div class="flex flex-col items-center gap-2 mt-3">
             <div class="flex items-center gap-1.5">
               ${passes
@@ -1670,7 +1710,7 @@
               </button>
               <span class="font-label-md text-text-heading font-semibold">${
                 idx + 1
-              } of 4 · ${activePass.passenger_name}</span>
+              } of ${totalPasses} · ${activePass.passenger_name}</span>
               <button id="next-pass-btn" type="button" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-text-heading">
                 <span class="material-symbols-outlined text-[18px]">chevron_right</span>
               </button>
@@ -1696,17 +1736,24 @@
   }
 
   function bindScreenG() {
+    const totalPasses =
+      (state.boardingPasses && state.boardingPasses.length) ||
+      ((state.sessionData &&
+        state.sessionData.passengers &&
+        state.sessionData.passengers.length) ||
+        4);
     const prevBtn = document.getElementById("prev-pass-btn");
     const nextBtn = document.getElementById("next-pass-btn");
     if (prevBtn) {
       prevBtn.addEventListener("click", () => {
-        state.activePassIndex = (state.activePassIndex + 3) % 4;
+        state.activePassIndex =
+          (state.activePassIndex + totalPasses - 1) % totalPasses;
         renderCurrentScreen();
       });
     }
     if (nextBtn) {
       nextBtn.addEventListener("click", () => {
-        state.activePassIndex = (state.activePassIndex + 1) % 4;
+        state.activePassIndex = (state.activePassIndex + 1) % totalPasses;
         renderCurrentScreen();
       });
     }
@@ -1714,7 +1761,7 @@
     if (walletBtn) {
       walletBtn.addEventListener("click", () => {
         showToast(
-          "Added 4 boarding passes (Marta, Declan, Fia, Oisín) to Apple Wallet."
+          `Added ${totalPasses} boarding passes to Apple Wallet.`
         );
       });
     }
@@ -1825,6 +1872,13 @@
           state.seatMapData = await apiFetch(
             `/api/v1/checkin/sessions/${state.sessionId}/seat-map`
           );
+          if (
+            state.seatMapData &&
+            state.seatMapData.recommended_seats &&
+            state.seatMapData.recommended_seats.length > 0
+          ) {
+            state.selectedSeats = state.seatMapData.recommended_seats.slice();
+          }
         }
         state.currentScreen = target;
         renderCurrentScreen();
@@ -1834,9 +1888,9 @@
     const supportBtn = document.getElementById("nav-support-btn");
     if (supportBtn) {
       supportBtn.addEventListener("click", () => {
-        showToast(
-          "App 2026 Help Hub · Booking X8Y9QL (DUB → FAO, FR1234) is on schedule."
-        );
+        submitHelpHubQuery("What is my flight status and gate?");
+        state.currentScreen = "checkin_start";
+        renderCurrentScreen();
       });
     }
 

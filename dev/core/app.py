@@ -48,6 +48,12 @@ class CheckoutRequest(BaseModel):
     payment_method_token: str = Field(default="visa_4412")
 
 
+class AssistQueryRequest(BaseModel):
+    """Request body for Help Hub natural-language trip assistance."""
+
+    query: str = Field(..., min_length=1, max_length=280)
+
+
 def create_app(service: CheckinFlowService | None = None) -> FastAPI:
     """Create and configure the FastAPI application instance."""
     flow_service = service or CheckinFlowService()
@@ -94,6 +100,13 @@ def create_app(service: CheckinFlowService | None = None) -> FastAPI:
     def get_session(session_id: str) -> dict[str, Any]:
         try:
             return flow_service.get_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/v1/checkin/sessions/{session_id}/assist")
+    def assist_session(session_id: str, req: AssistQueryRequest) -> dict[str, Any]:
+        try:
+            return flow_service.assist_session(session_id=session_id, query=req.query)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

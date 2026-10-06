@@ -437,6 +437,7 @@ def check_specs_drift(verbose: bool = False) -> tuple[int, list[str]]:
         "/api/v1/checkin/personas",
         "/api/v1/checkin/sessions",
         "/api/v1/checkin/sessions/{session_id}",
+        "/api/v1/checkin/sessions/{session_id}/assist",
         "/api/v1/checkin/sessions/{session_id}/seat-map",
         "/api/v1/checkin/sessions/{session_id}/seats",
         "/api/v1/checkin/sessions/{session_id}/actions",

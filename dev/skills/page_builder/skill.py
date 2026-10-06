@@ -11,7 +11,10 @@ from dev.core.models import ExecutionContext, validate_against_contract
 from dev.core.orchestrator import ADKOrchestrator
 from dev.core.telemetry import TelemetryEmitter, default_telemetry
 from dev.skills.ancillary_ranking.skill import rank_and_filter_ancillaries
-from dev.skills.assistant_copy.skill import synthesize_assistant_panel
+from dev.skills.assistant_copy.skill import (
+    answer_trip_question,
+    synthesize_assistant_panel,
+)
 from dev.tools.basket_pricing import build_basket_state, issue_boarding_passes
 from dev.tools.propensity_scorer import (
     CANONICAL_BOOKING,
@@ -70,6 +73,51 @@ CARD_TEMPLATES: dict[str, dict[str, Any]] = {
         "cta_label": "Add",
         "secondary_link_label": None,
     },
+    "car_hire": {
+        "product_id": "car_hire",
+        "icon": "car",
+        "title": "Car hire in Faro",
+        "status_pill": "Partner rate",
+        "status_pill_token": "pill/plan",
+        "description": "Pick up at Faro Airport (FAO) \u00b7 Free cancellation",
+        "price_label": "From \u20ac28.00/day",
+        "price_eur": 28.00,
+        "control_type": "toggle_all_pax",
+        "selected": False,
+        "quantity": 0,
+        "cta_label": "Add",
+        "secondary_link_label": None,
+    },
+    "fast_track": {
+        "product_id": "fast_track",
+        "icon": "bolt",
+        "title": "Fast Track Security",
+        "status_pill": "Dublin T1",
+        "status_pill_token": "pill/next",
+        "description": "Dedicated security lane at Dublin Airport for all 4 passengers",
+        "price_label": "\u20ac28 for 4 passengers",
+        "price_eur": 28.00,
+        "control_type": "toggle_all_pax",
+        "selected": False,
+        "quantity": 0,
+        "cta_label": "Add",
+        "secondary_link_label": None,
+    },
+    "travel_insurance": {
+        "product_id": "travel_insurance",
+        "icon": "shield",
+        "title": "Travel Insurance Plus",
+        "status_pill": None,
+        "status_pill_token": None,
+        "description": "Medical, baggage & delay cover for all 4 passengers for this flight",
+        "price_label": "\u20ac64 for 4 passengers",
+        "price_eur": 64.00,
+        "control_type": "toggle_all_pax",
+        "selected": False,
+        "quantity": 0,
+        "cta_label": "Add",
+        "secondary_link_label": None,
+    },
 }
 
 DRAWER_TEMPLATES: dict[str, dict[str, Any]] = {
@@ -79,6 +127,51 @@ DRAWER_TEMPLATES: dict[str, dict[str, Any]] = {
         "description": "Pick up at Faro Airport (FAO) \u00b7 Free cancellation",
         "price_label": "From \u20ac28.00/day",
         "price_eur": 28.00,
+        "selected": False,
+        "cta_label": "Add",
+    },
+    "fast_track": {
+        "product_id": "fast_track",
+        "title": "Fast Track Security (DUB)",
+        "description": "Dedicated security lane at Dublin Terminal 1",
+        "price_label": "\u20ac28.00 total",
+        "price_eur": 28.00,
+        "selected": False,
+        "cta_label": "Add",
+    },
+    "travel_insurance": {
+        "product_id": "travel_insurance",
+        "title": "Travel Insurance Plus",
+        "description": "Medical, baggage & delay cover for all 4 passengers for this flight",
+        "price_label": "\u20ac64.00 total",
+        "price_eur": 64.00,
+        "selected": False,
+        "cta_label": "Add",
+    },
+    "checked_bag_20kg": {
+        "product_id": "checked_bag_20kg",
+        "title": "20kg Checked Bag",
+        "description": "Up to 119 \u00d7 119 \u00d7 81cm hold luggage for this flight",
+        "price_label": "\u20ac39.99",
+        "price_eur": 39.99,
+        "selected": False,
+        "cta_label": "Add",
+    },
+    "reserved_seats": {
+        "product_id": "reserved_seats",
+        "title": "Sit together (Row 12)",
+        "description": "4 contiguous seats in Row 12 (12A\u201312D)",
+        "price_label": "\u20ac24.00 total",
+        "price_eur": 24.00,
+        "selected": False,
+        "cta_label": "Add",
+    },
+    "priority_boarding": {
+        "product_id": "priority_boarding",
+        "title": "Priority & 2 Cabin Bags",
+        "description": "Board first with 10kg wheelie + small personal bag each",
+        "price_label": "\u20ac76.00 total",
+        "price_eur": 76.00,
         "selected": False,
         "cta_label": "Add",
     },
@@ -242,6 +335,17 @@ class CheckinFlowService:
         """Return the current CheckinSessionResponse for a session_id."""
         state = self._require_session(session_id)
         return deepcopy(state["response"])
+
+    def assist_session(self, session_id: str, query: str) -> dict[str, Any]:
+        """Answer a Help Hub trip question grounded in the session's live booking and basket."""
+        state = self._require_session(session_id)
+        return answer_trip_question(
+            query=query,
+            session_state=state,
+            context=state["context"],
+            orchestrator=self.orchestrator,
+            telemetry=self.telemetry,
+        )
 
     def get_seat_map(self, session_id: str) -> dict[str, Any]:
         """Generate the Boeing 737 seat map for Screen F."""
@@ -625,12 +729,14 @@ class CheckinFlowService:
         state["response"]["basket_total_eur"] = basket["total_eur"]
         state["response"]["declined_product_ids"] = list(state["declined_product_ids"])
 
-        # Refresh card selection states inside pages
+        # Refresh card and drawer selection states inside pages
         for page in state["response"]["pages"]:
             for card in page["cards"]:
                 qty = int(state["selected_quantities"].get(card["product_id"], 0))
                 card["quantity"] = qty
                 card["selected"] = qty > 0
+            for drawer in page["drawer_items"]:
+                drawer["selected"] = int(state["selected_quantities"].get(drawer["product_id"], 0)) > 0
 
         total_pages = len(state["response"]["pages"])
         if next_screen == "offer_page_1":

@@ -205,4 +205,31 @@ def test_frontend_ui_serving_and_stitch_sanitization(tmp_path: Path) -> None:
     # 4. Screen B travel insurance clarifies per-flight coverage and omits free-cancellation line
     assert "for this flight" in js_body
     assert "Full refund if you need to cancel" not in js_body
+    # 5. Dynamic API grounding functions present in app.js
+    assert "renderDynamicOfferCard" in js_body
+    assert "renderSeatCell" in js_body
+    assert "/assist" in js_body
+
+    # Verify Help Hub /assist endpoint grounded in live session
+    session_res = client.post("/api/v1/checkin/sessions", json={"persona_id": "marta_byrne"})
+    sid = session_res.json()["session_id"]
+
+    seat_query = client.post(
+        f"/api/v1/checkin/sessions/{sid}/assist",
+        json={"query": "Can I sit together with my children?"},
+    )
+    assert seat_query.status_code == 200
+    seat_assist = seat_query.json()
+    assert seat_assist["surface_token"] == "surface/ai"
+    assert "Row 12" in seat_assist["heading"] or "12A" in seat_assist["supporting_text"]
+    assert seat_assist["guardrail_status"] == "PASS"
+
+    gate_query = client.post(
+        f"/api/v1/checkin/sessions/{sid}/assist",
+        json={"query": "What terminal and gate does my flight depart from?"},
+    )
+    assert gate_query.status_code == 200
+    gate_assist = gate_query.json()
+    assert "Gate 104" in gate_assist["heading"] or "Gate 104" in gate_assist["supporting_text"]
+
 

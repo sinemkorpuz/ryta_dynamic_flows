@@ -17,7 +17,7 @@ DEFAULT_PRO_MODEL = os.getenv("GEMINI_PRO_MODEL", "gemini-3.1-pro")
 
 
 class ADKOrchestrator:
-    """Wraps Google ADK Agent definition and bounded-latency execution with fallback."""
+    """Wraps Google ADK Agent definition, tool registration, and bounded-latency execution."""
 
     def __init__(
         self,
@@ -25,26 +25,52 @@ class ADKOrchestrator:
         agent_name: str = "assistant_copy_orchestrator",
         model_name: str | None = None,
         instruction: str = "Write concise first-person travel assistant insights.",
+        tools: list[Callable[..., Any]] | None = None,
         timeout_seconds: float = 0.22,
         llm_callable: Callable[[str], str] | None = None,
     ) -> None:
         self.agent_name = agent_name
         self.model_name = model_name or DEFAULT_FLASH_MODEL
+        self.instruction = instruction
+        self.tools = list(tools or [])
         self.timeout_seconds = timeout_seconds
         self._llm_callable = llm_callable
         self.adk_agent = Agent(
             name=self.agent_name,
             model=self.model_name,
-            instruction=instruction,
+            instruction=self.instruction,
+            tools=self.tools,
         )
 
     @property
     def is_live_api_configured(self) -> bool:
-        """Return True when a non-placeholder GOOGLE_API_KEY or custom callable is present."""
+        """Return True when a non-placeholder GEMINI_API_KEY / GOOGLE_API_KEY or callable is present."""
         if self._llm_callable is not None:
             return True
-        api_key = os.getenv("GOOGLE_API_KEY", "").strip()
-        return bool(api_key and api_key != "your_api_key_here" and not api_key.startswith("example"))
+        api_key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+        return bool(
+            api_key
+            and api_key != "your_api_key_here"
+            and not api_key.startswith("example")
+        )
+
+    def _default_genai_callable(self, prompt: str) -> str:
+        """Invoke Gemini via google.genai using the ADK Agent's configured model and instruction."""
+        from google import genai
+        from google.genai import types
+
+        api_key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+        client = genai.Client(api_key=api_key) if api_key else genai.Client()
+        response = client.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=self.instruction,
+                temperature=0.2,
+                max_output_tokens=160,
+            ),
+        )
+        return (response.text or "").strip()
 
     def run_with_fallback(
         self,
@@ -58,7 +84,7 @@ class ADKOrchestrator:
         Returns:
             tuple of (result_dict, source_label, guardrail_status, security_events)
         """
-        if not self.is_live_api_configured or self._llm_callable is None:
+        if not self.is_live_api_configured:
             fallback_payload = fallback_fn()
             is_valid, events = validator_fn(fallback_payload)
             return (
@@ -89,13 +115,13 @@ class ADKOrchestrator:
             )
 
     def _invoke_bounded(self, prompt: str) -> str:
-        """Invoke the configured LLM callable inside an asyncio timeout window."""
-        assert self._llm_callable is not None
+        """Invoke the configured LLM callable (or default Gemini client) inside an asyncio timeout window."""
+        active_callable = self._llm_callable or self._default_genai_callable
 
         async def _call() -> str:
             loop = asyncio.get_running_loop()
             return await asyncio.wait_for(
-                loop.run_in_executor(None, self._llm_callable, prompt),
+                loop.run_in_executor(None, active_callable, prompt),
                 timeout=self.timeout_seconds,
             )
 
