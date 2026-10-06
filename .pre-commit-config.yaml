@@ -1,0 +1,34 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+        files: \.(json|jsons)$
+        types: [file]
+
+  # Python Linting & Formatting (Ruff)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.5
+    hooks:
+      - id: ruff
+        args: [ --fix ]
+      - id: ruff-format
+
+  # TypeScript/JS Linting (Oxlint)
+  - repo: https://github.com/oxc-project/mirrors-oxlint
+    rev: v0.9.5
+    hooks:
+      - id: oxlint
+
+  # Local Neutral Naming & PII Guardrail (.blocked_terms)
+  - repo: local
+    hooks:
+      - id: check-blocked-terms
+        name: Check for blocked terms / PII (.blocked_terms)
+        entry: >-
+          bash -c 'if [ -f .blocked_terms ]; then terms=$(grep -vE "^(#|[[:space:]]*$)" .blocked_terms || true); if [ -n "$terms" ] && grep -inFf <(echo "$terms") "$@"; then echo "ERROR - Blocked term found in staged files (see .blocked_terms)."; exit 1; fi; fi' --
+        language: system
+        types: [text]

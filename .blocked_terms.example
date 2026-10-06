@@ -1,0 +1,7 @@
+# Example local blocked terms file for maintenance PII audit
+# Copy this file to .blocked_terms (git-ignored) and add any specific LDAPs,
+# personal names, or private project IDs you want the maintenance script to audit.
+#
+# example-ldap
+# developer-name
+# my-personal-project-id

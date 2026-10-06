@@ -1,0 +1,16 @@
+# User Stories & Backlog Template
+# Copy or rename this file per track (e.g., frontend-user_stories.yaml, adk-user_stories.yaml).
+
+track: COMPONENT
+updated_at: "2026-10-06"
+
+stories:
+  - id: US-001
+    title: "<Short capability title>"
+    gate: "Gate 1: Specify"
+    status: "todo" # todo | in_progress | blocked | done
+    spec_ref: ".agents/specs/COMPONENT-architecture.md"
+    contract_ref: "contracts/telemetry.jsons"
+    acceptance_criteria:
+      - "<Falsifiable criterion 1>"
+      - "<Emits telemetry conforming to contracts/telemetry.jsons>"

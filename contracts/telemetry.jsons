@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Copyright 2026 Google. This software is provided as-is, without warranty or representation for any use or purpose. Your use of it is subject to your agreement with Google.",
+  "title": "Agent Execution Telemetry Schema",
+  "description": "Standardized schema for all agent, skill, and tool executions.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Used to version this logging schema itself (e.g., '1.0.0'). Allows for safe future evolution."
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "DEFAULT",
+        "DEBUG",
+        "INFO",
+        "NOTICE",
+        "WARNING",
+        "ERROR",
+        "CRITICAL",
+        "ALERT",
+        "EMERGENCY"
+      ]
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable summary of the log event."
+    },
+    "logging.googleapis.com/trace": {
+      "type": "string",
+      "pattern": "^projects/[^/]+/traces/[a-f0-9]{32}$",
+      "description": "GCP special field for trace waterfall correlation."
+    },
+    "logging.googleapis.com/spanId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{16}$",
+      "description": "GCP special field for trace span correlation."
+    },
+    "context": {
+      "type": "object",
+      "description": "Customer-specific business and multi-tenancy routing context.",
+      "properties": {
+        "tenant_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tenant_id",
+        "session_id"
+      ]
+    },
+    "gen_ai.system": {
+      "type": "string"
+    },
+    "gen_ai.request.model": {
+      "type": "string"
+    },
+    "gen_ai.operation.name": {
+      "type": "string"
+    },
+    "gen_ai.agent.id": {
+      "type": "string"
+    },
+    "gen_ai.usage.input_tokens": {
+      "type": "integer"
+    },
+    "gen_ai.usage.output_tokens": {
+      "type": "integer"
+    },
+    "skill": {
+      "type": "object",
+      "description": "The specific declarative skill being executed.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "tool": {
+      "type": "object",
+      "description": "The specific tool invoked by the skill or agent.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "security": {
+      "type": "object",
+      "properties": {
+        "guardrail_status": {
+          "type": "string",
+          "enum": [
+            "PASS",
+            "FLAG",
+            "BLOCK"
+          ]
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "Sanitized inputs, outputs, and errors. Fully extensible.",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "SUCCESS",
+            "FAILURE",
+            "ESCALATED"
+          ]
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "error_details": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "status"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "severity",
+    "message",
+    "logging.googleapis.com/trace",
+    "logging.googleapis.com/spanId",
+    "context",
+    "gen_ai.operation.name"
+  ],
+  "additionalProperties": true
+}
