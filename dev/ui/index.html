@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Ryanair — Dynamic Ancillary Flows (App 2026 Help Hub)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "text-body": "#5B6472",
+            "on-secondary": "#ffffff",
+            "tertiary": "#210086",
+            "on-primary-container": "#87a4ff",
+            "on-error-container": "#93000a",
+            "tertiary-container": "#3400c2",
+            "accent-ai": "#4B2EDB",
+            "error": "#ba1a1a",
+            "primary-fixed-dim": "#b4c5ff",
+            "on-secondary-container": "#715b00",
+            "inverse-surface": "#2d3038",
+            "on-surface": "#191b23",
+            "surface-container-low": "#f2f3fd",
+            "primary-container": "#073590",
+            "inverse-on-surface": "#eff0fb",
+            "surface-container-high": "#e6e8f2",
+            "outline-variant": "#c4c6d4",
+            "surface-variant": "#e0e2ec",
+            "secondary-container": "#fcd43e",
+            "background": "#f9f9ff",
+            "surface-container-highest": "#e0e2ec",
+            "pill-plan-bg": "#FFEDD5",
+            "surface": "#f9f9ff",
+            "error-container": "#ffdad6",
+            "pill-plan-text": "#C2410C",
+            "pill-next-text": "#4338CA",
+            "surface-tint": "#3859b4",
+            "pill-done-text": "#15803D",
+            "on-secondary-fixed": "#231b00",
+            "pill-done-bg": "#DCFCE7",
+            "on-tertiary-fixed-variant": "#3e18d0",
+            "on-primary": "#ffffff",
+            "tertiary-fixed": "#e4dfff",
+            "pill-next-bg": "#EEF2FF",
+            "text-heading": "#10131A",
+            "secondary-fixed-dim": "#eac32c",
+            "border-hairline": "#E4E7EC",
+            "secondary-fixed": "#ffe07f",
+            "on-tertiary-fixed": "#170065",
+            "outline": "#747683",
+            "on-error": "#ffffff",
+            "on-secondary-fixed-variant": "#564500",
+            "surface-ai": "#F2F1FE",
+            "on-surface-variant": "#444652",
+            "pill-review-bg": "#FEF3C7",
+            "on-tertiary": "#ffffff",
+            "inverse-primary": "#b4c4ff",
+            "surface-page": "#FFFFFF",
+            "on-primary-fixed-variant": "#1a409a",
+            "surface-container": "#ecedf8",
+            "on-tertiary-container": "#a69bff",
+            "primary-fixed": "#dbe1ff",
+            "surface-dim": "#d8d9e4",
+            "primary": "#002164",
+            "on-background": "#191b23",
+            "surface-bright": "#f9f9ff",
+            "tertiary-fixed-dim": "#c6bfff",
+            "secondary": "#725c00",
+            "pill-review-text": "#B45309",
+            "on-primary-fixed": "#00174c",
+            "surface-container-lowest": "#ffffff"
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          spacing: {
+            "space-xs": "0.25rem",
+            "space-sm": "0.5rem",
+            "space-md": "1rem",
+            "space-lg": "1.25rem",
+            "space-xl": "1.5rem",
+            "gutter": "1rem",
+            "margin": "1.25rem"
+          },
+          fontFamily: {
+            "sans": ["Plus Jakarta Sans", "sans-serif"],
+            "body-md": ["Plus Jakarta Sans", "sans-serif"],
+            "label-sm": ["Plus Jakarta Sans", "sans-serif"],
+            "title-md": ["Plus Jakarta Sans", "sans-serif"],
+            "headline-sm": ["Plus Jakarta Sans", "sans-serif"],
+            "headline-lg": ["Plus Jakarta Sans", "sans-serif"],
+            "label-md": ["Plus Jakarta Sans", "sans-serif"],
+            "body-sm": ["Plus Jakarta Sans", "sans-serif"]
+          },
+          fontSize: {
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "label-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.08em", "fontWeight": "700" }],
+            "title-md": ["16px", { "lineHeight": "22px", "fontWeight": "600" }],
+            "headline-sm": ["22px", { "lineHeight": "28px", "fontWeight": "700" }],
+            "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }],
+            "label-md": ["12px", { "lineHeight": "16px", "fontWeight": "600" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }]
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: "Plus Jakarta Sans", sans-serif;
+      background-color: #EEF1F8;
+      -webkit-tap-highlight-color: transparent;
+    }
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 9999px;
+    }
+    .mobile-device-frame {
+      width: 393px;
+      height: 852px;
+      max-height: 94dvh;
+      border-radius: 40px;
+      box-shadow: 0 24px 60px rgba(7, 53, 144, 0.16), 0 0 0 10px #10131A;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: #FFFFFF;
+      position: relative;
+    }
+    @media (max-width: 640px) {
+      .mobile-device-frame {
+        width: 100vw;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body class="text-text-body antialiased min-h-screen flex flex-col">
+  <!-- Top Workbench Bar -->
+  <div class="w-full bg-[#073590] text-white px-4 py-2 flex items-center justify-between gap-3 text-xs border-b border-white/10">
+    <div class="flex items-center gap-2.5 flex-wrap">
+      <span class="inline-flex items-center gap-1.5 font-bold tracking-wide text-[#F1C933]">
+        <span class="material-symbols-outlined text-[16px]">flight_takeoff</span>
+        RYANAIR DYNAMIC FLOWS
+      </span>
+      <span class="text-white/40">|</span>
+      <span id="active-screen-badge" class="bg-white/15 px-2.5 py-0.5 rounded-full font-semibold">Screen E · Check-in Start</span>
+      <span id="latency-badge" class="bg-[#DCFCE7] text-[#15803D] px-2 py-0.5 rounded-full font-bold">ADK Ready</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="toggle-studio-btn" type="button" class="px-3 py-1 rounded-full bg-white/15 hover:bg-white/25 font-semibold flex items-center gap-1 transition-colors">
+        <span class="material-symbols-outlined text-[15px]">analytics</span>
+        <span>Screen 10 &amp; Signal Studio</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Workspace Split: Left Mobile Viewport + Right Screen 10 & Signal Studio -->
+  <div class="flex-1 flex flex-col lg:flex-row items-center lg:items-start justify-center gap-6 p-0 sm:p-4 lg:p-6 max-w-[1440px] w-full mx-auto">
+    <!-- Left Column: Mobile Viewport Frame + Screen Jump Bar -->
+    <div class="flex flex-col items-center gap-3 shrink-0">
+      <!-- Quick Screen Jump Strip for Design Review -->
+      <div class="hidden sm:flex items-center gap-1 bg-white px-2.5 py-1.5 rounded-full shadow-sm border border-border-hairline text-[11px] font-semibold">
+        <span class="text-text-body px-1.5">Jump:</span>
+        <button data-jump="checkin_start" class="jump-btn px-2.5 py-1 rounded-full bg-primary-container text-white transition-colors">E: Start</button>
+        <button data-jump="offer_page_1" class="jump-btn px-2.5 py-1 rounded-full hover:bg-surface-container-low text-text-heading transition-colors">A: Offer 1</button>
+        <button data-jump="seat_map" class="jump-btn px-2.5 py-1 rounded-full hover:bg-surface-container-low text-text-heading transition-colors">F: Seats</button>
+        <button data-jump="offer_page_2" class="jump-btn px-2.5 py-1 rounded-full hover:bg-surface-container-low text-text-heading transition-colors">B: Offer 2</button>
+        <button data-jump="review_and_pay" class="jump-btn px-2.5 py-1 rounded-full hover:bg-surface-container-low text-text-heading transition-colors">D: Pay</button>
+        <button data-jump="zero_offer" class="jump-btn px-2.5 py-1 rounded-full hover:bg-surface-container-low text-text-heading transition-colors">C: Zero-Offer</button>
+        <button data-jump="boarding_passes" class="jump-btn px-2.5 py-1 rounded-full hover:bg-surface-container-low text-text-heading transition-colors">G: Passes</button>
+      </div>
+
+      <!-- Mobile Phone Viewport -->
+      <div class="mobile-device-frame" id="mobile-frame">
+        <!-- Toast Notification Overlay -->
+        <div id="mobile-toast" class="hidden absolute top-4 inset-x-5 z-[60] bg-[#10131A]/95 text-white text-xs font-medium px-3.5 py-2.5 rounded-xl shadow-lg flex items-center justify-between gap-2">
+          <span id="mobile-toast-text"></span>
+          <button type="button" onclick="document.getElementById('mobile-toast').classList.add('hidden')" class="text-white/70 hover:text-white">
+            <span class="material-symbols-outlined text-[16px]">close</span>
+          </button>
+        </div>
+
+        <!-- Scrollable Screen Viewport -->
+        <div id="screen-viewport" class="flex-1 overflow-y-auto overflow-x-hidden bg-surface-page relative flex flex-col">
+          <!-- Dynamically populated by dev/ui/app.js -->
+        </div>
+
+        <!-- Persistent 4-Icon Bottom Tab Bar (App 2026 Help Hub) -->
+        <nav class="w-full z-50 bg-surface-page/95 backdrop-blur-xl border-t border-border-hairline shrink-0">
+          <div class="flex items-center justify-around h-14 px-space-xs">
+            <button type="button" data-jump="checkin_start" class="nav-tab-btn flex flex-col items-center justify-center min-w-[56px] h-11 text-primary font-bold transition-all">
+              <span class="material-symbols-outlined text-[22px]">home</span>
+              <span class="font-label-sm text-[10px] mt-0.5">Home</span>
+            </button>
+            <button type="button" data-jump="offer_page_1" class="nav-tab-btn flex flex-col items-center justify-center min-w-[56px] h-11 text-on-surface-variant hover:text-primary transition-all">
+              <span class="material-symbols-outlined text-[22px]">search</span>
+              <span class="font-label-sm text-[10px] mt-0.5">Search</span>
+            </button>
+            <button type="button" data-jump="boarding_passes" class="nav-tab-btn flex flex-col items-center justify-center min-w-[56px] h-11 text-on-surface-variant hover:text-primary transition-all">
+              <span class="material-symbols-outlined text-[22px]">airplane_ticket</span>
+              <span class="font-label-sm text-[10px] mt-0.5">Flights</span>
+            </button>
+            <button type="button" id="nav-support-btn" class="flex flex-col items-center justify-center min-w-[56px] h-11 text-on-surface-variant hover:text-primary transition-all">
+              <span class="material-symbols-outlined text-[22px]">help_outline</span>
+              <span class="font-label-sm text-[10px] mt-0.5">Support</span>
+            </button>
+          </div>
+        </nav>
+      </div>
+    </div>
+
+    <!-- Right Column: Screen 10 (Internal Model Feedback Loop) & Live Persona/Signal Studio -->
+    <aside id="studio-panel" class="w-full max-w-[920px] flex-1 flex flex-col gap-4 px-4 sm:px-0 pb-8">
+      <!-- Card 1: Live Persona & Signal Switcher (Proving Genuine Dynamism) -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-border-hairline flex flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span class="inline-block px-2.5 py-0.5 rounded-full bg-pill-next-bg text-pill-next-text font-label-sm uppercase">ADK Live Simulation Controls</span>
+            <h2 class="font-headline-sm text-text-heading mt-1">Persona &amp; Propensity Signal Switcher</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" data-persona="marta_byrne" class="persona-preset-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-primary-container text-white shadow-xs transition-all">
+              Marta Byrne (2 Steps)
+            </button>
+            <button type="button" data-persona="zero_offer" class="persona-preset-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-surface-container-low text-text-heading hover:bg-surface-container-high transition-all">
+              Zero-Offer Branch (1 Step)
+            </button>
+            <button type="button" data-persona="solo_weekend" class="persona-preset-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-surface-container-low text-text-heading hover:bg-surface-container-high transition-all">
+              Priority-Only (1 Step)
+            </button>
+          </div>
+        </div>
+
+        <!-- Signal Override Controls -->
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1 border-t border-border-hairline text-xs">
+          <label class="flex flex-col gap-1 bg-surface-container-low/70 p-2.5 rounded-xl">
+            <span class="font-semibold text-text-heading flex justify-between">
+              <span>Prior Priority Trips</span>
+              <span id="val-prior-priority" class="text-primary-container font-bold">3 / 4</span>
+            </span>
+            <input id="sig-prior-priority" type="range" min="0" max="4" value="3" class="accent-[#073590]">
+          </label>
+          <label class="flex flex-col gap-1 bg-surface-container-low/70 p-2.5 rounded-xl">
+            <span class="font-semibold text-text-heading flex justify-between">
+              <span>Children on Booking</span>
+              <span id="val-children" class="text-primary-container font-bold">2 kids</span>
+            </span>
+            <input id="sig-children" type="range" min="0" max="2" value="2" class="accent-[#073590]">
+          </label>
+          <label class="flex flex-col gap-1 bg-surface-container-low/70 p-2.5 rounded-xl">
+            <span class="font-semibold text-text-heading flex justify-between">
+              <span>Trip Length</span>
+              <span id="val-nights" class="text-primary-container font-bold">7 nights</span>
+            </span>
+            <input id="sig-nights" type="range" min="1" max="14" value="7" class="accent-[#073590]">
+          </label>
+          <div class="flex items-center justify-end">
+            <button id="apply-signals-btn" type="button" class="w-full h-full min-h-[42px] rounded-full border-[1.5px] border-primary-container text-primary-container hover:bg-primary-container hover:text-white font-bold text-xs transition-all flex items-center justify-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">bolt</span>
+              <span>Re-score &amp; Rebuild</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: Screen 10 — Internal Analytics & Model Feedback Loop -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-border-hairline flex flex-col gap-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <span class="inline-block px-2.5 py-0.5 rounded-full bg-surface-ai text-[#4B2EDB] font-label-sm uppercase">Screen 10 · Companion Ops Dashboard</span>
+            <h2 class="font-headline-sm text-text-heading mt-1">Model Feedback Loop &amp; Funnel KPIs</h2>
+          </div>
+          <div id="live-counters-strip" class="flex items-center gap-2 text-xs">
+            <!-- Populated from GET /api/v1/analytics/summary -->
+          </div>
+        </div>
+
+        <!-- 4 KPI Tiles -->
+        <div id="kpi-tiles-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <!-- Populated dynamically -->
+        </div>
+
+        <!-- Propensity Scoring & Business Rule Filter Table for Current Session -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-title-md text-text-heading">Real-Time Propensity Scores &amp; Business Rule Filter (Current Session)</h3>
+            <span class="text-xs text-text-body">Card threshold ≥ 0.50 · Drawer 0.10–0.49 · Floor &lt; 0.10</span>
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-border-hairline">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-surface-container-low text-text-body font-bold uppercase text-[10px] tracking-wider">
+                  <th class="py-2.5 px-3">Rank</th>
+                  <th class="py-2.5 px-3">Ancillary Product</th>
+                  <th class="py-2.5 px-3">Score</th>
+                  <th class="py-2.5 px-3">Top Signal Driver</th>
+                  <th class="py-2.5 px-3">Page Builder Disposition</th>
+                </tr>
+              </thead>
+              <tbody id="propensity-table-body" class="divide-y divide-border-hairline">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Take-up Comparison Bar Chart -->
+        <div>
+          <h3 class="font-title-md text-text-heading mb-2">Ancillary Take-Up: Dynamic Flow vs. Static 7-Page Funnel</h3>
+          <div id="takeup-bars" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>

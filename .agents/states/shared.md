@@ -20,10 +20,10 @@ This document tracks cross-track contracts, shared dependencies, and integration
 
 | Integration Point | Owner(s) | Current Gate | Notes |
 |---|---|---|---|
-| Check-in Session & Dynamic Page Builder (`POST /api/v1/checkin/sessions`) | `adk`, `frontend` | `Gate 4: Verify` (`adk`) / `Gate 2: Contract` (`frontend`) | Backend live & verified (~57ms latency); awaiting `frontend` prototype import. |
-| Boeing 737 Family Seat Map (`GET /seat-map`, `POST /seats`) | `adk`, `frontend` | `Gate 4: Verify` (`adk`) / `Gate 2: Contract` (`frontend`) | Enforces Row 12 (`12A–12D`), child rules (ages 6 & 9), and forward jump to Offer Page 2. |
-| Basket Checkout & Boarding Passes (`POST /actions`, `POST /checkout`) | `adk`, `frontend` | `Gate 4: Verify` (`adk`) / `Gate 2: Contract` (`frontend`) | Enforces decline suppression, empty-basket Review & Pay skip, and pass badges (`PRIORITY`, `12A`). |
-| Model Feedback Loop (`GET /api/v1/analytics/summary`) | `adk`, `frontend` | `Gate 4: Verify` (`adk`) / `Gate 2: Contract` (`frontend`) | Powers Screen 10 KPI tiles and live persona/signal switching metrics. |
+| Check-in Session & Dynamic Page Builder (`POST /api/v1/checkin/sessions`) | `adk`, `frontend` | `Gate 4: Verify` (`adk` & `frontend`) | Backend live & verified (~57ms latency); wired to `dev/ui/` Single-Page App. |
+| Boeing 737 Family Seat Map (`GET /seat-map`, `POST /seats`) | `adk`, `frontend` | `Gate 4: Verify` (`adk` & `frontend`) | Enforces Row 12 (`12A–12D`), child rules (ages 6 & 9), no countdown timer, and forward jump to Offer Page 2. |
+| Basket Checkout & Boarding Passes (`POST /actions`, `POST /checkout`) | `adk`, `frontend` | `Gate 4: Verify` (`adk` & `frontend`) | Enforces decline suppression, empty-basket Review & Pay skip, and pass badges (`PRIORITY`, `12A`). |
+| Model Feedback Loop (`GET /api/v1/analytics/summary`) | `adk`, `frontend` | `Gate 4: Verify` (`adk` & `frontend`) | Powers Screen 10 KPI tiles, take-up chart, and live persona/signal studio in `dev/ui/`. |
 
 ---
 

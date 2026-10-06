@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from dev.core.orchestrator import DEFAULT_FLASH_MODEL, DEFAULT_PRO_MODEL
 from dev.skills.page_builder.skill import CheckinFlowService
+
+UI_DIR = Path(__file__).resolve().parents[1] / "ui"
 
 
 class CreateSessionRequest(BaseModel):
@@ -135,6 +140,13 @@ def create_app(service: CheckinFlowService | None = None) -> FastAPI:
     @app.get("/api/v1/analytics/summary")
     def get_analytics_summary() -> dict[str, Any]:
         return flow_service.get_analytics_summary()
+
+    if UI_DIR.exists():
+        app.mount("/ui", StaticFiles(directory=str(UI_DIR)), name="ui")
+
+        @app.get("/", include_in_schema=False)
+        def serve_ui_root() -> FileResponse:
+            return FileResponse(UI_DIR / "index.html")
 
     return app
 

@@ -177,3 +177,32 @@ def test_zero_offer_and_decline_skip_paths(tmp_path: Path) -> None:
     assert decline_p2.status_code == 200
     assert decline_p2.json()["next_screen"] == "boarding_passes"
     assert len(decline_p2.json()["boarding_passes"]) == 4
+
+
+def test_frontend_ui_serving_and_stitch_sanitization(tmp_path: Path) -> None:
+    """Verify the Single-Page App shell and sanitized Stitch screens are served cleanly."""
+    telemetry = TelemetryEmitter(log_path=tmp_path / "ui_traces.jsonl")
+    service = CheckinFlowService(telemetry=telemetry)
+    client = TestClient(create_app(service=service))
+
+    root_res = client.get("/")
+    assert root_res.status_code == 200
+    assert "Dynamic Ancillary Flows" in root_res.text
+    assert "/ui/app.js" in root_res.text
+
+    app_js_res = client.get("/ui/app.js")
+    assert app_js_res.status_code == 200
+    js_body = app_js_res.text
+
+    # Sanitization invariants from Stitch HTML review:
+    # 1. No dark-pattern countdown timer from Screen F
+    assert "09:42" not in js_body
+    # 2. No Seat 14A contradiction on Screen C
+    assert "Seat 14A" not in js_body
+    # 3. Screen E children have explicit 6y and 9y age badges
+    assert "Child (6y)" in js_body
+    assert "Child (9y)" in js_body
+    # 4. Screen B travel insurance clarifies per-flight coverage and omits free-cancellation line
+    assert "for this flight" in js_body
+    assert "Full refund if you need to cancel" not in js_body
+

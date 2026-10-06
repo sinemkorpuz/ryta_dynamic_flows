@@ -6,8 +6,8 @@ updated_at: "2026-10-06"
 stories:
   - id: FE-001
     title: "Import Stitch mobile prototype (Screens E, A, F, B, D, C, G) and apply sanitization repairs"
-    gate: "Gate 2: Contract"
-    status: "todo"
+    gate: "Gate 4: Verification"
+    status: "done"
     spec_ref: ".agents/specs/frontend-architecture.md"
     contract_ref: "contracts/checkin_flow.jsons"
     acceptance_criteria:
@@ -17,8 +17,8 @@ stories:
 
   - id: FE-002
     title: "Wire frontend state machine and step-numbering invariants to FastAPI /api/v1/checkin/* endpoints"
-    gate: "Gate 2: Contract"
-    status: "todo"
+    gate: "Gate 4: Verification"
+    status: "done"
     spec_ref: ".agents/specs/frontend-architecture.md"
     contract_ref: "contracts/basket_checkout.jsons"
     acceptance_criteria:
@@ -28,8 +28,8 @@ stories:
 
   - id: FE-003
     title: "Implement Screen 10 internal analytics feedback dashboard and live persona/signal switcher"
-    gate: "Gate 2: Contract"
-    status: "todo"
+    gate: "Gate 4: Verification"
+    status: "done"
     spec_ref: ".agents/specs/frontend-architecture.md"
     contract_ref: "contracts/analytics_summary.jsons"
     acceptance_criteria:
