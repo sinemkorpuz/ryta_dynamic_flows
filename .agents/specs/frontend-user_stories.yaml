@@ -36,3 +36,15 @@ stories:
       - "Renders 4 KPI tiles (Conversion 24.1%, Pages/check-in 1.8, Median time 71s, Offers shown 2.4), take-up chart, and ranked offer table"
       - "Allows live switching between Marta Byrne (2 steps), Zero-Offer (1 step), and custom signal overrides"
       - "Emits client telemetry conforming to contracts/telemetry.jsons"
+
+  - id: FE-004
+    title: "Generate and co-evolve Cloudstyle 2.0 Slidev customer demo presentation in dev/slides/"
+    gate: "Gate 4: Verification"
+    status: "done"
+    spec_ref: ".agents/specs/slides-architecture.md"
+    contract_ref: "contracts/checkin_flow.jsons"
+    acceptance_criteria:
+      - "Implements 7 reusable Google Cloudstyle 2.0 Vue layouts (#FFFFFF canvas, 4-color rainbow bars, colored Break Slides with #202124 text on yellow, Table A/B, 4-Card Matrix, Two-Tone 60pt, and corporate footers)"
+      - "Embeds dual-mode interactive Vue components (HelpHubSimulator, LiveScoringExplorer, OpsFeedbackWidget) calling localhost:8000 with deterministic offline fallback"
+      - "Includes 14 modular slides across 4 partials with assertive BBP headlines, tripartite speaker notes (PURPOSE, VERBAL SCRIPT, TRANSITION), and automated pytest verification"
+

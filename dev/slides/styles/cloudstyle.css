@@ -1,0 +1,188 @@
+/* ==========================================================================
+   Google Cloudstyle 2.0 Design System + App 2026 Help Hub Framed Tokens
+   Reference: Cloudstyle Slides Template (16:9 Widescreen Canvas)
+   ========================================================================== */
+
+:root {
+  /* Official Cloudstyle 2.0 Master Palette */
+  --cs-dark1: #202124;          /* Google Grey 900 — Primary headlines, body, dark mode canvas */
+  --cs-white: #FFFFFF;          /* Pure White — Default canvas & card fill */
+  --cs-dark2: #5F6368;          /* Google Grey 700 — Secondary text, subtitles, footers */
+  --cs-light2: #F1F3F4;         /* Google Grey 100 — Table B row headers & soft containers */
+  --cs-header-fill: #F8F9FA;    /* Table A header fill */
+  --cs-blue: #4285F4;           /* ACCENT1 — Google Blue 500 */
+  --cs-red: #EA4335;            /* ACCENT2 — Google Red 500 */
+  --cs-yellow: #FBBC05;         /* ACCENT3 — Google Yellow 500 (Mandatory #202124 dark text!) */
+  --cs-green: #34A853;          /* ACCENT4 — Google Green 500 */
+  --cs-blue-dark: #185ABC;      /* ACCENT5 — Google Blue 800 */
+  --cs-blue-soft: #D2E3FC;      /* Blue 100 — Soft chart/badge fill */
+
+  /* Cloudstyle Functional Borders & Lines */
+  --cs-border-card: #D9D9D9;    /* 0.8pt comparative card stroke (Slide 28) */
+  --cs-border-toc: #CCCCCC;     /* 0.8pt horizontal index divider line (Slide 03) */
+  --cs-border-image: #BDC1C6;   /* 0.8pt perimeter border on framed visual/demo areas */
+  --cs-border-table: #E8EAED;   /* 0.75pt Table A grid stroke */
+
+  /* Ryanair App 2026 Help Hub Tokens (Scoped strictly to framed product viewports) */
+  --hh-surface-page: #FFFFFF;
+  --hh-surface-ai: #F2F1FE;
+  --hh-brand-navy: #073590;
+  --hh-brand-yellow: #F1C933;
+  --hh-accent-ai: #4B2EDB;
+  --hh-border-hairline: #E4E7EC;
+  --hh-text-heading: #10131A;
+  --hh-text-body: #5B6472;
+
+  /* Typography */
+  --cs-font-display: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  --cs-font-body: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  --cs-font-mono: 'Roboto Mono', monospace;
+  --hh-font-sans: 'Plus Jakarta Sans', 'Google Sans', sans-serif;
+}
+
+.slidev-layout {
+  background-color: var(--cs-white);
+  color: var(--cs-dark1);
+  font-family: var(--cs-font-body);
+  padding: 28px 48px 44px 48px;
+  position: relative;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Standard Slide Title (30pt Regular #202124 — Never Bold per Cloudstyle 2.0 spec) */
+.cs-slide-title {
+  font-family: var(--cs-font-display);
+  font-size: 1.55rem;
+  line-height: 1.25;
+  font-weight: 400 !important;
+  color: var(--cs-dark1);
+  letter-spacing: -0.01em;
+  margin: 0 0 14px 0;
+}
+
+/* Two-Tone 60pt Display Headline */
+.cs-display-twotone {
+  font-family: var(--cs-font-display);
+  font-size: 2.35rem;
+  line-height: 1.16;
+  font-weight: 400;
+  color: var(--cs-dark1);
+  letter-spacing: -0.02em;
+}
+
+.cs-display-twotone .accent-clause {
+  color: var(--cs-blue);
+}
+
+/* Uppercase Eyebrow Label (12pt Bold #4285F4) */
+.cs-eyebrow {
+  font-family: var(--cs-font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cs-blue);
+  margin-bottom: 6px;
+}
+
+/* Sidebar Analytical Commentary (12pt Regular #202124) */
+.cs-commentary {
+  font-size: 0.82rem;
+  line-height: 1.48;
+  color: var(--cs-dark1);
+}
+
+.cs-commentary strong {
+  font-weight: 700;
+}
+
+/* Table A (Clean Corporate Data Table — Slide 26) */
+.cs-table-a {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+  background: var(--cs-white);
+}
+
+.cs-table-a th {
+  background-color: var(--cs-header-fill);
+  color: var(--cs-dark1);
+  font-weight: 700;
+  text-align: left;
+  padding: 7px 10px;
+  border: 1px solid var(--cs-border-table);
+}
+
+.cs-table-a td {
+  color: var(--cs-dark1);
+  font-weight: 400;
+  padding: 6px 10px;
+  border: 1px solid var(--cs-border-table);
+  vertical-align: top;
+}
+
+/* Table B (Full-Width Blue Header Matrix — Slide 27) */
+.cs-table-b {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.73rem;
+}
+
+.cs-table-b th {
+  background-color: var(--cs-blue);
+  color: var(--cs-white);
+  font-weight: 700;
+  text-align: left;
+  padding: 7px 10px;
+  border: 1px solid var(--cs-white);
+}
+
+.cs-table-b th.corner-empty {
+  background-color: var(--cs-white);
+  color: var(--cs-dark1);
+  border-bottom: 1px solid var(--cs-border-table);
+}
+
+.cs-table-b td.row-header {
+  background-color: var(--cs-light2);
+  color: var(--cs-dark1);
+  font-weight: 500;
+  padding: 6px 10px;
+  border: 1px solid var(--cs-white);
+}
+
+.cs-table-b td {
+  background-color: var(--cs-white);
+  color: var(--cs-dark1);
+  padding: 6px 10px;
+  border: 1px solid var(--cs-border-table);
+}
+
+/* Comparative Card (Slide 28 — Sharp Rectangular #D9D9D9 Border + Internal #202124 Divider) */
+.cs-comp-card {
+  background: var(--cs-white);
+  border: 1px solid var(--cs-border-card);
+  border-radius: 0px;
+  padding: 14px 14px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.cs-comp-card-divider {
+  height: 1px;
+  background-color: var(--cs-dark1);
+  width: 88%;
+  margin: 10px auto;
+}
+
+/* Framed Visual / Product Showcase Container (#BDC1C6 0.8pt perimeter border) */
+.cs-framed-surface {
+  border: 1px solid var(--cs-border-image);
+  background: var(--cs-white);
+  overflow: hidden;
+}
