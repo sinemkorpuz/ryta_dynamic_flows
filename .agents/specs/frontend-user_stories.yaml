@@ -1,0 +1,38 @@
+# Frontend Track User Stories & Backlog
+
+track: frontend
+updated_at: "2026-10-06"
+
+stories:
+  - id: FE-001
+    title: "Import Stitch mobile prototype (Screens E, A, F, B, D, C, G) and apply sanitization repairs"
+    gate: "Gate 2: Contract"
+    status: "todo"
+    spec_ref: ".agents/specs/frontend-architecture.md"
+    contract_ref: "contracts/checkin_flow.jsons"
+    acceptance_criteria:
+      - "Applies App 2026 Help Hub tokens (#FFFFFF page, #F2F1FE assistant lavender, #073590 navy, #F1C933 yellow)"
+      - "Removes Seat Map 09:42 countdown timer, Zero-Offer Seat 14A badge, and Offer Page 2 return-journey/refund copy"
+      - "Displays accurate child ages Fia B (6) and Oisin B (9) on Screen E"
+
+  - id: FE-002
+    title: "Wire frontend state machine and step-numbering invariants to FastAPI /api/v1/checkin/* endpoints"
+    gate: "Gate 2: Contract"
+    status: "todo"
+    spec_ref: ".agents/specs/frontend-architecture.md"
+    contract_ref: "contracts/basket_checkout.jsons"
+    acceptance_criteria:
+      - "Enforces Header Ladder (full greeting only on E and C) and Step-Numbering Rule (only Offer Pages A and B carry step numbers)"
+      - "Wires Confirm Seats (F -> B), Offer Page 2 back arrow (B -> A), and empty-basket Review & Pay skip (B -> G)"
+      - "Starts all toggles off and steppers at 0 with equal-weight 'No thanks, continue ->' buttons"
+
+  - id: FE-003
+    title: "Implement Screen 10 internal analytics feedback dashboard and live persona/signal switcher"
+    gate: "Gate 2: Contract"
+    status: "todo"
+    spec_ref: ".agents/specs/frontend-architecture.md"
+    contract_ref: "contracts/analytics_summary.jsons"
+    acceptance_criteria:
+      - "Renders 4 KPI tiles (Conversion 24.1%, Pages/check-in 1.8, Median time 71s, Offers shown 2.4), take-up chart, and ranked offer table"
+      - "Allows live switching between Marta Byrne (2 steps), Zero-Offer (1 step), and custom signal overrides"
+      - "Emits client telemetry conforming to contracts/telemetry.jsons"

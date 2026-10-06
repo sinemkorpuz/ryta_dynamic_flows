@@ -1,0 +1,62 @@
+# ADK & Backend Track User Stories & Backlog
+
+track: adk
+updated_at: "2026-10-06"
+
+stories:
+  - id: ADK-001
+    title: "Formalize JSON Schema contracts for check-in flow, seat map, basket checkout, and analytics"
+    gate: "Gate 2: Contract"
+    status: "todo"
+    spec_ref: ".agents/specs/adk-architecture.md"
+    contract_ref: "contracts/checkin_flow.jsons"
+    acceptance_criteria:
+      - "All 4 domain schemas (checkin_flow.jsons, seat_map.jsons, basket_checkout.jsons, analytics_summary.jsons) validate as JSON Schema Draft 2020-12"
+      - "Cross-track contract versions are registered in .agents/states/shared.md"
+
+  - id: ADK-002
+    title: "Implement deterministic propensity scorer and business rule filter tools"
+    gate: "Gate 2: Contract"
+    status: "todo"
+    spec_ref: ".agents/specs/adk-architecture.md"
+    contract_ref: "contracts/checkin_flow.jsons"
+    acceptance_criteria:
+      - "Scores all 8 candidate ancillaries for Marta Byrne with exact ranks (0.84, 0.71, 0.58, 0.29, 0.14, 0.11, 0.08, 0.04)"
+      - "Strips Fast Track (FAO route), Flexi (<48h cutoff), Travel Insurance (6 prior declines), and Airport Transfer (<0.10 display floor)"
+      - "Supports live signal_overrides for dynamic re-ranking and Zero-Offer branch"
+      - "Emits telemetry conforming to contracts/telemetry.jsons"
+
+  - id: ADK-003
+    title: "Implement Boeing 737 seat allocator tool with Row 12 block and child seating rules"
+    gate: "Gate 2: Contract"
+    status: "todo"
+    spec_ref: ".agents/specs/adk-architecture.md"
+    contract_ref: "contracts/seat_map.jsons"
+    acceptance_criteria:
+      - "Highlights 12A, 12B, 12C, 12D at EUR 6.00 per seat (EUR 24.00 total) as 'Best row for your group'"
+      - "Enforces child seating restrictions for ages 6 and 9 on emergency exit rows with explicit tap reasons"
+      - "Never allocates or references Row 14 (Seat 14A) or countdown timers"
+      - "Emits telemetry conforming to contracts/telemetry.jsons"
+
+  - id: ADK-004
+    title: "Implement dynamic page builder and ADK Gemini Flash assistant copy skill with 220ms fallback"
+    gate: "Gate 2: Contract"
+    status: "todo"
+    spec_ref: ".agents/specs/adk-architecture.md"
+    contract_ref: "contracts/checkin_flow.jsons"
+    acceptance_criteria:
+      - "Assembles 0, 1, or 2 offer pages with primary cards (score >= 0.50) and collapsed 'More extras (1)' drawer (0.10 <= score < 0.50)"
+      - "Generates first-person lavender panel copy via Gemini Flash or deterministic template fallback within <= 220ms"
+      - "Blocks any output containing 'AI', urgency timers, or modified euro prices"
+      - "Emits telemetry conforming to contracts/telemetry.jsons"
+
+  - id: ADK-005
+    title: "Implement FastAPI check-in session, basket checkout, boarding pass, and Screen 10 analytics endpoints"
+    gate: "Gate 2: Contract"
+    status: "todo"
+    spec_ref: ".agents/specs/adk-architecture.md"
+    contract_ref: "contracts/basket_checkout.jsons"
+    acceptance_criteria:
+      - "Exposes /api/v1/checkin/sessions, /seat-map, /seats, /actions, /checkout, and /api/v1/analytics/summary"
+      - "Enforces Seat Map -> Offer Page 2 forward routing, Offer Page 2 -> Offer Page 1 back routing, and empty-basket Review & Pay bypass"
+      - "Achieves p95 <= 300ms session initialization latency and 100% schema compliance against contracts/telemetry.jsons"

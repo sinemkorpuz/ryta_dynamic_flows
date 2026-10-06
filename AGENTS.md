@@ -1,25 +1,29 @@
-# TEMPLATE
+# Ryanair Dynamic Ancillary Flows (`ryta`)
 
-Welcome to the **TEMPLATE** project. This document defines the mission, workspace taxonomy, 4-stage assembly line lifecycle, and collaboration conventions for AI agents and human engineers working together in this repository.
+Welcome to the **Ryanair Dynamic Ancillary Flows** project. This document defines the mission, workspace taxonomy, 4-stage assembly line lifecycle, and collaboration conventions for AI agents and human engineers working together in this repository.
 
 ---
 
 ## 1. Project Mission & Objectives
 
-Our mission is to engineer **`<SYSTEM_NAME>`** to solve **`<PROBLEM_STATEMENT>`** for **`<TARGET_USERS>`**.
+Our mission is to engineer the **Dynamic Check-in & Ancillary Flow Engine** to replace the fixed 7-page linear ancillary funnel with an AI-ranked, business-rule-filtered, 0-to-2-page personalized check-in experience for **Ryanair mobile app passengers** in the App 2026 Help Hub design language.
 
 ### Key Objectives
 
 This project targets the following measurable outcomes:
 
-* **Objective 1:** `<Define primary functional capability and target metric, e.g., p95 latency ≤ 2.0s>`
-* **Objective 2:** `<Define reliability, quality, or accuracy target>`
+* **Objective 1 (Check-in Funnel Compression):** Compress the ancillary offer flow from 4.6 average pages per check-in to ≤ 2.0 offer pages (and 0 offer pages when no products pass eligibility and threshold filters), reducing median check-in completion time from 134s to ≤ 75s.
+* **Objective 2 (Low-Latency Hybrid Scoring & Page Assembly):** Score all candidate ancillaries, enforce hard business eligibility and suppression rules, assemble dynamic page layouts, and synthesize first-person assistant copy within a server-side latency budget of p95 ≤ 300ms (with deterministic copy fallback if LLM generation exceeds 220ms).
+* **Objective 3 (Ancillary Conversion & Ethical UX):** Increase ancillary conversion to ≥ 24.1% (+6.3 percentage points over the static flow) while strictly enforcing zero pre-selection, first-class decline affordances, and zero urgency/scarcity dark patterns.
+* **Objective 4 (Observability & Feedback Loop):** Emit 100% schema-valid execution traces conforming to [`contracts/telemetry.jsons`](./contracts/telemetry.jsons) and expose real-time funnel metrics for the internal model feedback loop dashboard.
 
 ### Non-Goals
 
 The following items are explicitly out of scope for this repository:
 
-* **Non-Goal 1:** `<Define excluded scope or adjacent system boundaries>`
+* **Non-Goal 1 (Core PSS / Reservation System Replacement):** We do not replace the underlying Passenger Service System (PSS), flight inventory, or payment gateway; those are modeled via deterministic domain tools and fixture state.
+* **Non-Goal 2 (Initial Flight Search & Ticket Booking):** This system governs the post-booking **check-in and ancillary attach flow** (48h prior to departure), not initial flight search or base fare booking.
+* **Non-Goal 3 (Dark-Pattern Optimization):** Pre-selected extras, hidden decline links, artificial countdown timers, and scarcity counters are strictly prohibited.
 
 ---
 
@@ -137,8 +141,8 @@ We operate as a high-velocity pair programming team:
 4. **Hyperlink Files & PII Prevention:**
    - **In Committed Repository Files (`.md`):** Always use workspace-relative markdown links (e.g., `[telemetry.jsons](./contracts/telemetry.jsons)`). **Never** write `file:///...` URLs into committed files, as absolute paths break across developer machines and leak local usernames/LDAPs.
    - **In Chat Responses:** Always use clickable `file:///...` markdown links (with line ranges where applicable) when referencing files, code symbols, or documentation in chat for fast IDE navigation.
-5. **Continuous Roadmap Alignment:** Keep track roadmaps in [.agents/states/COMPONENT.md](./.agents/states/COMPONENT.md) and backlogs in [.agents/specs/COMPONENT-user_stories.yaml](./.agents/specs/COMPONENT-user_stories.yaml) synchronized as milestones and gates are achieved.
-6. **Neutral Naming:** Never name customers, competitor products, brands, or individual people/LDAPs in repository content. Use role-based wording (e.g., `"the client"`, `"the domain team"`, `"customer-specific"`, `"frontend track"` / `"adk track"`), `example.com` for sample emails, and `example-*` for sample project IDs. Configure `.blocked_terms` locally to enforce automated pre-commit checks.
+5. **Continuous Roadmap Alignment:** Keep track roadmaps in [`.agents/states/adk.md`](./.agents/states/adk.md) and [`.agents/states/frontend.md`](./.agents/states/frontend.md) and backlogs in [`.agents/specs/adk-user_stories.yaml`](./.agents/specs/adk-user_stories.yaml) and [`.agents/specs/frontend-user_stories.yaml`](./.agents/specs/frontend-user_stories.yaml) synchronized as milestones and gates are achieved.
+6. **PII & Naming Guardrails:** Never include developer names, personal LDAPs, or internal project IDs in repository content (enforced via `.blocked_terms` pre-commit hook). Use role-based titles (`"Lead Engineer"`, `"Agentic Co-Engineer"`) for document authorship, `example.com` for sample emails, and `example-*` for sample GCP project IDs. Domain fixtures defined in the Stitch Consistency Contract (`Ryanair`, `FR1234`, `DUB → FAO`, `Marta Byrne`, `X8Y9QL`) are explicitly permitted so backend payloads match the frontend prototype verbatim.
 7. **Session Continuity & Shared Memory:** At session boot, agents MUST read the relevant track state in [.agents/states/COMPONENT.md](./.agents/states/COMPONENT.md) and cross-track integration state in [.agents/states/shared.md](./.agents/states/shared.md).
    At the close of a session or completion of a significant task, append a date-stamped session handover note under `.agents/sessions/<track>/YYYY-MM-DD_<topic>.md` and update the corresponding state file in `.agents/states/` when milestone or gate status changes. Raw brainstorms and spike notes belong in `.agents/scratchpad/`.
 8. **Human Consent for Specifications & Operating Rules:** Any additions, modifications, or deletions to documents in `.agents/specs/` or to [AGENTS.md](./AGENTS.md) itself require explicit human consent from the Lead Engineer. Agents may propose changes (via chat diffs, interactive questions, or drafts in `.agents/scratchpad/`), but must never directly write to or edit these files without prior approval.
