@@ -6,8 +6,8 @@ updated_at: "2026-10-06"
 stories:
   - id: ADK-001
     title: "Formalize JSON Schema contracts for check-in flow, seat map, basket checkout, and analytics"
-    gate: "Gate 2: Contract"
-    status: "todo"
+    gate: "Gate 4: Verify"
+    status: "done"
     spec_ref: ".agents/specs/adk-architecture.md"
     contract_ref: "contracts/checkin_flow.jsons"
     acceptance_criteria:
@@ -16,8 +16,8 @@ stories:
 
   - id: ADK-002
     title: "Implement deterministic propensity scorer and business rule filter tools"
-    gate: "Gate 2: Contract"
-    status: "todo"
+    gate: "Gate 4: Verify"
+    status: "done"
     spec_ref: ".agents/specs/adk-architecture.md"
     contract_ref: "contracts/checkin_flow.jsons"
     acceptance_criteria:
@@ -28,8 +28,8 @@ stories:
 
   - id: ADK-003
     title: "Implement Boeing 737 seat allocator tool with Row 12 block and child seating rules"
-    gate: "Gate 2: Contract"
-    status: "todo"
+    gate: "Gate 4: Verify"
+    status: "done"
     spec_ref: ".agents/specs/adk-architecture.md"
     contract_ref: "contracts/seat_map.jsons"
     acceptance_criteria:
@@ -40,8 +40,8 @@ stories:
 
   - id: ADK-004
     title: "Implement dynamic page builder and ADK Gemini Flash assistant copy skill with 220ms fallback"
-    gate: "Gate 2: Contract"
-    status: "todo"
+    gate: "Gate 4: Verify"
+    status: "done"
     spec_ref: ".agents/specs/adk-architecture.md"
     contract_ref: "contracts/checkin_flow.jsons"
     acceptance_criteria:
@@ -52,8 +52,8 @@ stories:
 
   - id: ADK-005
     title: "Implement FastAPI check-in session, basket checkout, boarding pass, and Screen 10 analytics endpoints"
-    gate: "Gate 2: Contract"
-    status: "todo"
+    gate: "Gate 4: Verify"
+    status: "done"
     spec_ref: ".agents/specs/adk-architecture.md"
     contract_ref: "contracts/basket_checkout.jsons"
     acceptance_criteria:

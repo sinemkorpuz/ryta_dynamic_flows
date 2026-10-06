@@ -1,0 +1,517 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Copyright 2026 Google. Machine-readable contract for dynamic check-in session initialization, scoring, and offer page assembly.",
+  "title": "Dynamic Check-in Flow Schema",
+  "description": "Schema governing POST /api/v1/checkin/sessions and GET /api/v1/checkin/sessions/{session_id} payloads.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "persona_id": {
+      "type": "string",
+      "enum": [
+        "marta_byrne",
+        "zero_offer",
+        "solo_weekend"
+      ]
+    },
+    "flow_branch": {
+      "type": "string",
+      "enum": [
+        "dynamic_offers",
+        "zero_offer"
+      ]
+    },
+    "total_steps": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2
+    },
+    "entry_step_pill": {
+      "type": "string",
+      "enum": [
+        "2 STEPS TO YOUR BOARDING PASSES",
+        "1 STEP TO YOUR BOARDING PASSES",
+        "1 STEP"
+      ]
+    },
+    "current_screen": {
+      "type": "string",
+      "enum": [
+        "checkin_start",
+        "offer_page_1",
+        "seat_map",
+        "offer_page_2",
+        "review_and_pay",
+        "boarding_passes",
+        "zero_offer"
+      ]
+    },
+    "booking": {
+      "$ref": "#/$defs/BookingSummary"
+    },
+    "passengers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/PassengerInfo"
+      }
+    },
+    "ranked_ancillaries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AncillaryScoreItem"
+      }
+    },
+    "pages": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "$ref": "#/$defs/OfferPage"
+      }
+    },
+    "zero_offer_panel": {
+      "$ref": "#/$defs/AssistantPanel"
+    },
+    "declined_product_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "basket_total_eur": {
+      "type": "number",
+      "minimum": 0
+    },
+    "latency_ms": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "schema_version",
+    "session_id",
+    "persona_id",
+    "flow_branch",
+    "total_steps",
+    "entry_step_pill",
+    "current_screen",
+    "booking",
+    "passengers",
+    "ranked_ancillaries",
+    "pages",
+    "declined_product_ids",
+    "basket_total_eur"
+  ],
+  "$defs": {
+    "BookingSummary": {
+      "type": "object",
+      "properties": {
+        "airline": {
+          "type": "string",
+          "const": "Ryanair"
+        },
+        "booking_reference": {
+          "type": "string",
+          "const": "X8Y9QL"
+        },
+        "flight_number": {
+          "type": "string",
+          "const": "FR1234"
+        },
+        "origin_code": {
+          "type": "string",
+          "const": "DUB"
+        },
+        "origin_name": {
+          "type": "string",
+          "const": "Dublin"
+        },
+        "origin_terminal": {
+          "type": "string",
+          "const": "Terminal 1"
+        },
+        "destination_code": {
+          "type": "string",
+          "const": "FAO"
+        },
+        "destination_name": {
+          "type": "string",
+          "const": "Faro"
+        },
+        "departure_date_label": {
+          "type": "string",
+          "const": "Tue 14 Oct"
+        },
+        "departure_time": {
+          "type": "string",
+          "const": "06:35"
+        },
+        "boarding_time": {
+          "type": "string",
+          "const": "05:55"
+        },
+        "gate_closes_time": {
+          "type": "string",
+          "const": "06:05"
+        },
+        "gate": {
+          "type": "string",
+          "const": "104"
+        },
+        "status_badge": {
+          "type": "string",
+          "const": "Check-in open"
+        },
+        "fare_type": {
+          "type": "string"
+        },
+        "trip_nights": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "airline",
+        "booking_reference",
+        "flight_number",
+        "origin_code",
+        "origin_name",
+        "destination_code",
+        "destination_name",
+        "departure_date_label",
+        "departure_time",
+        "boarding_time",
+        "gate_closes_time",
+        "gate",
+        "status_badge",
+        "fare_type",
+        "trip_nights"
+      ],
+      "additionalProperties": false
+    },
+    "PassengerInfo": {
+      "type": "object",
+      "properties": {
+        "passenger_id": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "full_name": {
+          "type": "string"
+        },
+        "initials": {
+          "type": "string"
+        },
+        "passenger_type": {
+          "type": "string",
+          "enum": [
+            "adult",
+            "child"
+          ]
+        },
+        "age": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "is_lead_booker": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "passenger_id",
+        "display_name",
+        "full_name",
+        "initials",
+        "passenger_type",
+        "age",
+        "is_lead_booker"
+      ],
+      "additionalProperties": false
+    },
+    "AncillaryScoreItem": {
+      "type": "object",
+      "properties": {
+        "rank": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "product_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "top_driver": {
+          "type": "string"
+        },
+        "eligible": {
+          "type": "boolean"
+        },
+        "removal_rule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "placement": {
+          "type": "string",
+          "enum": [
+            "primary_card",
+            "drawer",
+            "removed"
+          ]
+        },
+        "price_eur": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "rank",
+        "product_id",
+        "title",
+        "score",
+        "top_driver",
+        "eligible",
+        "removal_rule",
+        "placement",
+        "price_eur"
+      ],
+      "additionalProperties": false
+    },
+    "AssistantPanel": {
+      "type": "object",
+      "properties": {
+        "surface_token": {
+          "type": "string",
+          "const": "surface/ai"
+        },
+        "heading": {
+          "type": "string",
+          "minLength": 1
+        },
+        "supporting_text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "adk_gemini_flash",
+            "deterministic_fallback"
+          ]
+        }
+      },
+      "required": [
+        "surface_token",
+        "heading",
+        "supporting_text",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "OfferCard": {
+      "type": "object",
+      "properties": {
+        "product_id": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status_pill": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status_pill_token": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "price_label": {
+          "type": "string"
+        },
+        "price_eur": {
+          "type": "number",
+          "minimum": 0
+        },
+        "control_type": {
+          "type": "string",
+          "enum": [
+            "toggle_all_pax",
+            "seat_map_trigger",
+            "quantity_stepper"
+          ]
+        },
+        "selected": {
+          "type": "boolean"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cta_label": {
+          "type": "string"
+        },
+        "secondary_link_label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "product_id",
+        "icon",
+        "title",
+        "status_pill",
+        "status_pill_token",
+        "description",
+        "price_label",
+        "price_eur",
+        "control_type",
+        "selected",
+        "quantity",
+        "cta_label",
+        "secondary_link_label"
+      ],
+      "additionalProperties": false
+    },
+    "DrawerItem": {
+      "type": "object",
+      "properties": {
+        "product_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "price_label": {
+          "type": "string"
+        },
+        "price_eur": {
+          "type": "number",
+          "minimum": 0
+        },
+        "selected": {
+          "type": "boolean"
+        },
+        "cta_label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "product_id",
+        "title",
+        "description",
+        "price_label",
+        "price_eur",
+        "selected",
+        "cta_label"
+      ],
+      "additionalProperties": false
+    },
+    "OfferPage": {
+      "type": "object",
+      "properties": {
+        "page_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "screen_id": {
+          "type": "string",
+          "enum": [
+            "offer_page_1",
+            "offer_page_2"
+          ]
+        },
+        "header_title": {
+          "type": "string",
+          "const": "Check in"
+        },
+        "step_indicator": {
+          "type": "string",
+          "pattern": "^Step [12] of [12]$"
+        },
+        "section_heading": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "assistant_panel": {
+          "$ref": "#/$defs/AssistantPanel"
+        },
+        "cards": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/OfferCard"
+          }
+        },
+        "drawer_label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "drawer_collapsed_by_default": {
+          "type": "boolean"
+        },
+        "drawer_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DrawerItem"
+          }
+        },
+        "decline_cta_label": {
+          "type": "string",
+          "const": "No thanks, continue \u2192"
+        }
+      },
+      "required": [
+        "page_number",
+        "screen_id",
+        "header_title",
+        "step_indicator",
+        "section_heading",
+        "assistant_panel",
+        "cards",
+        "drawer_label",
+        "drawer_collapsed_by_default",
+        "drawer_items",
+        "decline_cta_label"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

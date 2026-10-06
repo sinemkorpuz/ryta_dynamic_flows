@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Copyright 2026 Google. Machine-readable contract for basket mutations, review & pay (Screen D), and boarding pass issuance (Screen G).",
+  "title": "Basket Checkout and Boarding Passes Schema",
+  "description": "Schema governing POST /seats, POST /actions, and POST /checkout responses.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "current_screen": {
+      "type": "string",
+      "enum": [
+        "checkin_start",
+        "offer_page_1",
+        "seat_map",
+        "offer_page_2",
+        "review_and_pay",
+        "boarding_passes",
+        "zero_offer"
+      ]
+    },
+    "next_screen": {
+      "type": "string",
+      "enum": [
+        "checkin_start",
+        "offer_page_1",
+        "seat_map",
+        "offer_page_2",
+        "review_and_pay",
+        "boarding_passes",
+        "zero_offer"
+      ]
+    },
+    "step_indicator": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "basket": {
+      "$ref": "#/$defs/BasketState"
+    },
+    "declined_product_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "payment_confirmed": {
+      "type": "boolean"
+    },
+    "boarding_passes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BoardingPassCard"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "session_id",
+    "current_screen",
+    "next_screen",
+    "step_indicator",
+    "basket",
+    "declined_product_ids",
+    "payment_confirmed",
+    "boarding_passes"
+  ],
+  "$defs": {
+    "BasketLineItem": {
+      "type": "object",
+      "properties": {
+        "product_id": {
+          "type": "string"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "price_eur": {
+          "type": "number",
+          "minimum": 0
+        },
+        "formatted_price": {
+          "type": "string"
+        },
+        "removable": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "product_id",
+        "icon",
+        "label",
+        "quantity",
+        "price_eur",
+        "formatted_price",
+        "removable"
+      ],
+      "additionalProperties": false
+    },
+    "BasketState": {
+      "type": "object",
+      "properties": {
+        "header_title": {
+          "type": "string",
+          "const": "Review your extras"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BasketLineItem"
+          }
+        },
+        "total_eur": {
+          "type": "number",
+          "minimum": 0
+        },
+        "formatted_total": {
+          "type": "string"
+        },
+        "saved_payment_method": {
+          "type": "string",
+          "const": "Visa ending 4412"
+        },
+        "pay_cta_label": {
+          "type": "string",
+          "const": "Pay and get boarding passes"
+        }
+      },
+      "required": [
+        "header_title",
+        "items",
+        "total_eur",
+        "formatted_total",
+        "saved_payment_method",
+        "pay_cta_label"
+      ],
+      "additionalProperties": false
+    },
+    "BoardingPassCard": {
+      "type": "object",
+      "properties": {
+        "pass_index": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "total_passes": {
+          "type": "integer",
+          "const": 4
+        },
+        "passenger_name": {
+          "type": "string"
+        },
+        "passenger_type": {
+          "type": "string",
+          "enum": [
+            "adult",
+            "child"
+          ]
+        },
+        "booking_reference": {
+          "type": "string",
+          "const": "X8Y9QL"
+        },
+        "flight_number": {
+          "type": "string",
+          "const": "FR1234"
+        },
+        "route_label": {
+          "type": "string",
+          "const": "DUB \u2192 FAO"
+        },
+        "departure_date_label": {
+          "type": "string",
+          "const": "Tue 14 Oct"
+        },
+        "departure_time": {
+          "type": "string",
+          "const": "06:35"
+        },
+        "boarding_time": {
+          "type": "string",
+          "const": "05:55"
+        },
+        "gate": {
+          "type": "string",
+          "const": "104"
+        },
+        "seat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "badges": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "qr_payload": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pass_index",
+        "total_passes",
+        "passenger_name",
+        "passenger_type",
+        "booking_reference",
+        "flight_number",
+        "route_label",
+        "departure_date_label",
+        "departure_time",
+        "boarding_time",
+        "gate",
+        "seat",
+        "badges",
+        "qr_payload"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

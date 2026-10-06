@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Copyright 2026 Google. Machine-readable contract for Screen 10 Internal Analytics / Model Feedback Loop.",
+  "title": "Internal Model Feedback Loop Analytics Schema",
+  "description": "Schema governing GET /api/v1/analytics/summary payloads.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "kpi_tiles": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/KpiTile"
+      }
+    },
+    "takeup_by_ancillary": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AncillaryTakeupItem"
+      }
+    },
+    "top_ranked_offers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RankedOfferMetric"
+      }
+    },
+    "live_session_counters": {
+      "$ref": "#/$defs/LiveSessionCounters"
+    }
+  },
+  "required": [
+    "schema_version",
+    "kpi_tiles",
+    "takeup_by_ancillary",
+    "top_ranked_offers",
+    "live_session_counters"
+  ],
+  "$defs": {
+    "KpiTile": {
+      "type": "object",
+      "properties": {
+        "kpi_id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "delta_label": {
+          "type": "string"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "up_good",
+            "down_good",
+            "neutral"
+          ]
+        }
+      },
+      "required": [
+        "kpi_id",
+        "label",
+        "value",
+        "delta_label",
+        "direction"
+      ],
+      "additionalProperties": false
+    },
+    "AncillaryTakeupItem": {
+      "type": "object",
+      "properties": {
+        "product_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "dynamic_conversion_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "static_baseline_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "product_id",
+        "title",
+        "dynamic_conversion_pct",
+        "static_baseline_pct"
+      ],
+      "additionalProperties": false
+    },
+    "RankedOfferMetric": {
+      "type": "object",
+      "properties": {
+        "rank": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "product_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "mean_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "placement_rule": {
+          "type": "string"
+        },
+        "offers_shown": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "offers_accepted": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "rank",
+        "product_id",
+        "title",
+        "mean_score",
+        "placement_rule",
+        "offers_shown",
+        "offers_accepted"
+      ],
+      "additionalProperties": false
+    },
+    "LiveSessionCounters": {
+      "type": "object",
+      "properties": {
+        "total_sessions_created": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "zero_offer_sessions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "two_step_sessions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "checkouts_completed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_ancillary_revenue_eur": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "total_sessions_created",
+        "zero_offer_sessions",
+        "two_step_sessions",
+        "checkouts_completed",
+        "total_ancillary_revenue_eur"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

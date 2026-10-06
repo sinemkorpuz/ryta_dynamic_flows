@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Copyright 2026 Google. Machine-readable contract for the Boeing 737 seat map sub-screen (Screen F).",
+  "title": "Boeing 737 Family Seat Map Schema",
+  "description": "Schema governing GET /api/v1/checkin/sessions/{session_id}/seat-map payloads.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "screen_id": {
+      "type": "string",
+      "const": "seat_map"
+    },
+    "header_title": {
+      "type": "string",
+      "const": "Choose your seats"
+    },
+    "step_indicator": {
+      "type": "null",
+      "description": "Seat map is a sub-screen of Offer Page 1 and must never carry a step number."
+    },
+    "aircraft_type": {
+      "type": "string",
+      "const": "Boeing 737-800"
+    },
+    "recommended_block": {
+      "$ref": "#/$defs/RecommendedSeatBlock"
+    },
+    "assistant_panel": {
+      "type": "object",
+      "properties": {
+        "surface_token": {
+          "type": "string",
+          "const": "surface/ai"
+        },
+        "heading": {
+          "type": "string",
+          "const": "I've found 4 seats together"
+        },
+        "supporting_text": {
+          "type": "string",
+          "const": "Row 12, near the front."
+        }
+      },
+      "required": [
+        "surface_token",
+        "heading",
+        "supporting_text"
+      ],
+      "additionalProperties": false
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/SeatRow"
+      }
+    },
+    "sticky_footer": {
+      "type": "object",
+      "properties": {
+        "summary_label": {
+          "type": "string",
+          "const": "4 seats \u00b7 \u20ac24.00"
+        },
+        "total_eur": {
+          "type": "number",
+          "const": 24.0
+        },
+        "confirm_cta_label": {
+          "type": "string",
+          "const": "Confirm seats"
+        },
+        "next_screen_on_confirm": {
+          "type": "string",
+          "const": "offer_page_2"
+        },
+        "back_screen": {
+          "type": "string",
+          "const": "offer_page_1"
+        }
+      },
+      "required": [
+        "summary_label",
+        "total_eur",
+        "confirm_cta_label",
+        "next_screen_on_confirm",
+        "back_screen"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "session_id",
+    "screen_id",
+    "header_title",
+    "step_indicator",
+    "aircraft_type",
+    "recommended_block",
+    "assistant_panel",
+    "rows",
+    "sticky_footer"
+  ],
+  "$defs": {
+    "RecommendedSeatBlock": {
+      "type": "object",
+      "properties": {
+        "row_number": {
+          "type": "integer",
+          "const": 12
+        },
+        "seat_Designators": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "12A",
+              "12B",
+              "12C",
+              "12D"
+            ]
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "badge_label": {
+          "type": "string",
+          "const": "Best row for your group"
+        },
+        "price_per_seat_eur": {
+          "type": "number",
+          "const": 6.0
+        },
+        "total_price_eur": {
+          "type": "number",
+          "const": 24.0
+        }
+      },
+      "required": [
+        "row_number",
+        "seat_Designators",
+        "badge_label",
+        "price_per_seat_eur",
+        "total_price_eur"
+      ],
+      "additionalProperties": false
+    },
+    "SeatCell": {
+      "type": "object",
+      "properties": {
+        "seat_id": {
+          "type": "string"
+        },
+        "column": {
+          "type": "string",
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "recommended",
+            "available",
+            "occupied",
+            "unavailable_child_rule"
+          ]
+        },
+        "price_eur": {
+          "type": "number",
+          "minimum": 0
+        },
+        "restriction_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "seat_id",
+        "column",
+        "status",
+        "price_eur",
+        "restriction_reason"
+      ],
+      "additionalProperties": false
+    },
+    "SeatRow": {
+      "type": "object",
+      "properties": {
+        "row_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 33,
+          "not": {
+            "const": 14
+          }
+        },
+        "is_exit_row": {
+          "type": "boolean"
+        },
+        "child_restricted": {
+          "type": "boolean"
+        },
+        "restriction_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seats": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/$defs/SeatCell"
+          }
+        }
+      },
+      "required": [
+        "row_number",
+        "is_exit_row",
+        "child_restricted",
+        "restriction_reason",
+        "seats"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
