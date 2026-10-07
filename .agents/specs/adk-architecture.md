@@ -146,16 +146,24 @@ When the user taps `"Choose seats"` on Offer Page 1, the backend serves the Boei
 * **Child Seating Restrictions:** Because `Fia B` (age 6) and `Oisín B` (age 9) are on the booking, emergency exit rows (Rows 1, 16, and 17) and isolated single seats without an adjacent adult seat return `status = "unavailable_child_rule"` and `restriction_reason = "Unavailable for children under 16 (exit row / family adjacency rule)"`.
 * **No Countdown Timers:** Seat map responses never include hold timers (`"Seats held for 09:42"` is prohibited).
 
-### 4.5 ADK Assistant Copy Agent & Guardrails (`dev/skills/assistant_copy/skill.py`)
+### 4.5 ADK Assistant Copy & Interactive Trip Assistant (`dev/skills/assistant_copy/skill.py`)
 
-The `assistant_copy` skill wraps an ADK `Agent` configured with `GEMINI_FLASH_MODEL` (`gemini-3.8-flash`):
+The `assistant_copy` skill wraps two Google ADK `Agent` instances executed via `google.adk.runners.InMemoryRunner` (`GEMINI_FLASH_MODEL = "gemini-3.8-flash"` with automatic live model fallback to `"gemini-2.5-flash"`):
 
-1. **Input Context:** Receives structured passenger signals, active page index, and selected primary cards.
-2. **Guardrail Validator (`validate_assistant_copy`):** Inspects generated `heading` and `supporting_text` before returning:
-   - Rejects any text containing `"AI"`, `"artificial intelligence"`, `"model"`, `"algorithm"`, or `"bot"` (case-insensitive).
-   - Rejects any text containing countdown or scarcity patterns (`\d{2}:\d{2}`, `"hurry"`, `"only \d+ left"`, `"running out"`).
-   - Enforces length bounds (`heading <= 48 chars`, `supporting_text <= 90 chars`).
-3. **220ms Circuit Breaker & Canonical Fallback:** If the ADK call exceeds 220ms, raises an exception, or fails guardrail validation, or if `persona_id == "marta_byrne"` with unmodified signals (where verbatim Stitch copy is required), the skill returns the canonical Stitch copy and records the guardrail status in [`contracts/telemetry.jsons`](../../contracts/telemetry.jsons).
+1. **Page Assembly Insight Copy (`assistant_copy_synthesizer`):**
+   - **Input Context:** Receives structured passenger signals, active page index, and selected primary cards.
+   - **Guardrail Validator (`validate_assistant_copy`):** Inspects generated `heading` and `supporting_text` before returning:
+     - Rejects any text containing `"AI"`, `"artificial intelligence"`, `"model"`, `"algorithm"`, or `"bot"` (case-insensitive).
+     - Rejects any text containing countdown or scarcity patterns (`\d{2}:\d{2}`, `"hurry"`, `"only \d+ left"`, `"running out"`).
+     - Enforces length bounds (`heading <= 48 chars`, `supporting_text <= 90 chars`).
+   - **220ms Circuit Breaker & Canonical Fallback:** If the ADK call exceeds 220ms, raises an exception, or fails guardrail validation, or if `persona_id == "marta_byrne"` with unmodified signals (where verbatim Stitch copy is required), the skill returns the canonical Stitch copy and records the guardrail status in [`contracts/telemetry.jsons`](../../contracts/telemetry.jsons).
+2. **Interactive Help Hub Trip Assistant & Live Simulation (`help_hub_trip_assistant`):**
+   - **Session-Scoped ADK Tools:** Binds four deterministic Python tools to the active check-in session:
+     - `get_trip_and_ancillary_scores()`: Returns live booking metadata (`FR1234`, `DUB → FAO`), signal parameters, propensity scores (`0.84, 0.71, 0.58, 0.29, ...`), and basket items.
+     - `inspect_family_seat_map()`: Returns Boeing 737 Row 12 (`12A–12D`, `€24.00`) availability and Overwing Exit Row 16 child restrictions.
+     - `update_simulation_signals(trip_length_days, child_count, prior_priority_trips, insurance_decline_streak, hours_to_departure, reset_persona)`: Mutates live session simulation signals, re-runs `ancillary_ranking` and `page_builder`, and returns the updated funnel step count (`2 STEPS` vs `1 STEP`).
+     - `modify_basket_item(product_code, action, quantity)`: Adds or removes ancillaries (`priority_boarding`, `reserved_seating`, `checked_bag_20kg`, `car_hire`) in the active session basket.
+   - **Execution & Telemetry:** Runs with an interactive timeout of `4.5s` (falling back deterministically while still executing tool mutations when offline) and returns `headline`, `subtext`, `invoked_tools`, `latency_ms`, `state_mutated`, `signals`, `basket`, and `session`.
 
 ---
 
@@ -174,6 +182,7 @@ All endpoints accept and return `application/json` and emit a trace span to the 
 | `GET /api/v1/checkin/sessions/{id}/seat-map` | Path `id` | `SeatMapResponse` | Returns B737 seat map for **Screen F**, highlighting `12A–12D` (`€24.00`) and child-restricted rows. |
 | `POST /api/v1/checkin/sessions/{id}/seats` | `ConfirmSeatsRequest` | `BasketMutationResponse` | Confirms seats `12A–12D` (`€24.00`) and sets `next_screen = "offer_page_2"` (never returns to Offer Page 1). |
 | `POST /api/v1/checkin/sessions/{id}/actions` | `OfferActionRequest` | `BasketMutationResponse` | Processes `add`, `update_quantity`, `decline_page`, or `remove_item` and computes `next_screen`. |
+| `POST /api/v1/checkin/sessions/{id}/assist` | `AssistQueryRequest` | `AssistQueryResponse` | Executes `help_hub_trip_assistant` ADK agent + tools for **Screen E** Help Hub queries and live natural-language simulation/basket updates. |
 | `POST /api/v1/checkin/sessions/{id}/checkout` | `CheckoutRequest` | `BoardingPassesResponse` | Confirms payment (`Visa ending 4412`) and issues 4 boarding passes (`Screen G`) with badges (`PRIORITY`, `12A`). |
 | `GET /api/v1/analytics/summary` | None | `AnalyticsSummaryResponse` | Returns **Screen 10** KPIs (conversion `24.1%`, pages/check-in `1.8`, median time `71s`, offers shown `2.4`) + live session stats. |
 

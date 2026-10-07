@@ -24,5 +24,6 @@ Active working context for the **ADK Track** (Agent Development Kit orchestratio
 
 ## 3. Recent Session Handovers
 
+* [`2026-10-07_adk_live_simulation_assist.md`](../sessions/adk/2026-10-07_adk_live_simulation_assist.md) — Connected Screen E Help Hub question submission to the `help_hub_trip_assistant` ADK agent, session-bound tools, and `ADK Live Simulation Controls`.
 * [`2026-10-06_implement-adk-backend.md`](../sessions/adk/2026-10-06_implement-adk-backend.md) — Completed Gates 2, 3, and 4 for the ADK/FastAPI backend.
 * [`2026-10-06_specify-dynamic-flows.md`](../sessions/adk/2026-10-06_specify-dynamic-flows.md) — Completed Gate 1 specifications (`system-architecture.md`, `adk-architecture.md`, `frontend-architecture.md`) and track backlogs.

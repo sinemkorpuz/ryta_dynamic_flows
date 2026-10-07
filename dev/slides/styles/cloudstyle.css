@@ -33,11 +33,107 @@
   --hh-text-heading: #10131A;
   --hh-text-body: #5B6472;
 
-  /* Typography */
-  --cs-font-display: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
-  --cs-font-body: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Typography — prioritize loaded WOFF2 web fonts (Plus Jakarta Sans / Inter) to avoid unhinted Linux TTF fallback */
+  --cs-font-display: 'Plus Jakarta Sans', 'Inter', 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  --cs-font-body: 'Plus Jakarta Sans', 'Inter', 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
   --cs-font-mono: 'Roboto Mono', monospace;
-  --hh-font-sans: 'Plus Jakarta Sans', 'Google Sans', sans-serif;
+  --hh-font-sans: 'Plus Jakarta Sans', 'Inter', sans-serif;
+}
+
+/* Force crisp vector glyph rendering across scaled Slidev viewports (no 1x GPU bitmap rasterization) */
+#slide-content,
+.slidev-slide-content,
+.slidev-page,
+.slidev-layout {
+  will-change: auto !important;
+  backface-visibility: visible !important;
+  transform-style: flat !important;
+  filter: none !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+.slidev-layout * {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+/* Hide Slidev's upper-right Quick Goto / ToC overlay so it never overlaps slide headers */
+#slidev-goto-dialog {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Monospace / Highlighted Code Spans (replaces raw backticks and strips UnoCSS .prose pseudo-backticks) */
+.slidev-layout code::before,
+.slidev-layout code::after,
+.prose code::before,
+.prose code::after {
+  content: none !important;
+  display: none !important;
+}
+
+.slidev-layout code {
+  font-family: var(--cs-font-mono);
+  font-size: 0.85em;
+  font-weight: 600;
+  background-color: #E8F0FE !important;
+  color: #174EA6 !important;
+  border: 1px solid #D2E3FC !important;
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+/* Contextual Code Pill Palettes for Dark, Agentic Purple, Green, and Section Break Surfaces */
+.slidev-layout .contrast-dark code,
+.slidev-layout .cmd-box code,
+.slidev-layout .adk-orchestrator-banner code {
+  background-color: rgba(138, 180, 248, 0.18) !important;
+  color: #8AB4F8 !important;
+  border-color: rgba(138, 180, 248, 0.38) !important;
+}
+
+.slidev-layout .ag-line code,
+.slidev-layout .card-adk-highlight code {
+  background-color: #F2F1FE !important;
+  color: #4B2EDB !important;
+  border-color: #D2C4FC !important;
+}
+
+.slidev-layout .g-card code,
+.slidev-layout .pipeline-mini code {
+  background-color: #E6F4EA !important;
+  color: #137333 !important;
+  border-color: #CEEAD6 !important;
+}
+
+.slidev-layout .stage-head code {
+  background-color: rgba(255, 255, 255, 0.22) !important;
+  color: #FFFFFF !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.slidev-layout .sb-keep code,
+.slidev-layout .sb-draw code {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  color: inherit !important;
+  border-color: transparent !important;
+}
+
+.cloud-break.break-dark code {
+  background-color: rgba(255, 255, 255, 0.22) !important;
+  color: #FFFFFF !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+}
+
+.cloud-break.break-yellow code {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+  color: #202124 !important;
+  border-color: rgba(32, 33, 36, 0.28) !important;
 }
 
 .slidev-layout {
@@ -66,11 +162,11 @@
 /* Two-Tone 60pt Display Headline */
 .cs-display-twotone {
   font-family: var(--cs-font-display);
-  font-size: 2.35rem;
-  line-height: 1.16;
+  font-size: 2.25rem;
+  line-height: 1.18;
   font-weight: 400;
   color: var(--cs-dark1);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .cs-display-twotone .accent-clause {

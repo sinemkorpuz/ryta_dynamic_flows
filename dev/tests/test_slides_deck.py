@@ -58,13 +58,13 @@ def test_cloudstyle_layouts_and_yellow_contrast_rule() -> None:
     assert "#202124" in break_vue
 
 
-def test_fourteen_slides_have_tripartite_speaker_notes() -> None:
-    """Verify all 14 slides include PURPOSE, VERBAL SCRIPT, and TRANSITION notes."""
+def test_eighteen_slides_prioritized_flow_architecture_early_and_fallbacks() -> None:
+    """Verify all 18 slides include tripartite speaker notes, early architecture flow, Thank You slide, and 3 fallback slides."""
     slide_files = [
         SLIDES_DIR / "slides.md",
         PAGES_DIR / "01-executive-context.md",
-        PAGES_DIR / "02-customer-journey-demo.md",
         PAGES_DIR / "03-hybrid-adk-architecture.md",
+        PAGES_DIR / "02-customer-journey-demo.md",
         PAGES_DIR / "04-observability-coevolution.md",
     ]
     combined = "\n".join(f.read_text(encoding="utf-8") for f in slide_files)
@@ -73,9 +73,51 @@ def test_fourteen_slides_have_tripartite_speaker_notes() -> None:
     script_count = len(re.findall(r"^VERBAL SCRIPT:", combined, flags=re.MULTILINE))
     transition_count = len(re.findall(r"^TRANSITION:", combined, flags=re.MULTILINE))
 
-    assert purpose_count == 14, f"Expected 14 PURPOSE notes, found {purpose_count}"
-    assert script_count == 14, f"Expected 14 VERBAL SCRIPT notes, found {script_count}"
-    assert transition_count == 14, f"Expected 14 TRANSITION notes, found {transition_count}"
+    assert purpose_count == 18, f"Expected 18 PURPOSE notes, found {purpose_count}"
+    assert script_count == 18, f"Expected 18 VERBAL SCRIPT notes, found {script_count}"
+    assert transition_count == 18, f"Expected 18 TRANSITION notes, found {transition_count}"
+
+    # Verify zero unformatted raw backticks appear outside speaker-note HTML comments
+    for slide_file in slide_files:
+        without_comments = re.sub(r"<!--[\s\S]*?-->", "", slide_file.read_text(encoding="utf-8"))
+        assert "`" not in without_comments, f"Raw backtick found in {slide_file.name}; use <code>...</code>"
+
+    # Verify architecture partial is imported BEFORE customer journey demo in slides.md
+    master_text = (SLIDES_DIR / "slides.md").read_text(encoding="utf-8")
+    assert master_text.index("03-hybrid-adk-architecture.md") < master_text.index("02-customer-journey-demo.md")
+
+    # Verify 2-part Contents slides and Stitch/Antigravity vector logos in 01-executive-context.md
+    exec_text = (PAGES_DIR / "01-executive-context.md").read_text(encoding="utf-8")
+    assert 'title: "Contents (1 / 2)"' in exec_text
+    assert 'title: "Contents (2 / 2)"' in exec_text
+    assert "logo-chip-stitch" in exec_text
+    assert "logo-chip-ag" in exec_text
+    assert "toc-badge-end" in exec_text
+    assert "toc-badge-fallback" in exec_text
+
+    # Verify System Overview and ADK Workflow architecture diagram components exist and are embedded early
+    assert (COMPONENTS_DIR / "SystemOverviewDiagram.vue").is_file()
+    assert (COMPONENTS_DIR / "AdkWorkflowDiagram.vue").is_file()
+    arch_text = (PAGES_DIR / "03-hybrid-adk-architecture.md").read_text(encoding="utf-8")
+    assert "<SystemOverviewDiagram />" in arch_text
+    assert "<AdkWorkflowDiagram />" in arch_text
+
+    # Verify Thank You slide precedes the 3 Fallback slides in 04-observability-coevolution.md
+    obs_text = (PAGES_DIR / "04-observability-coevolution.md").read_text(encoding="utf-8")
+    thank_you_idx = obs_text.index('sectionNo: "Thank You"')
+    fb1_idx = obs_text.index("FALLBACK SLIDE 01")
+    fb2_idx = obs_text.index("FALLBACK SLIDE 02")
+    fb3_idx = obs_text.index("FALLBACK SLIDE 03")
+    assert thank_you_idx < fb1_idx < fb2_idx < fb3_idx
+
+    # Verify cover layout and architecture diagrams use HTML flexbox/grid cards instead of overlapping SVG <text>
+    cover_vue = (LAYOUTS_DIR / "cloud-cover.vue").read_text(encoding="utf-8")
+    sys_diag_vue = (COMPONENTS_DIR / "SystemOverviewDiagram.vue").read_text(encoding="utf-8")
+    adk_diag_vue = (COMPONENTS_DIR / "AdkWorkflowDiagram.vue").read_text(encoding="utf-8")
+    assert "arch-telemetry-card" in cover_vue
+    assert "<text " not in cover_vue
+    assert "<text " not in sys_diag_vue
+    assert "<text " not in adk_diag_vue
 
 
 def test_dual_mode_components_and_stitch_consistency_contract() -> None:
@@ -112,13 +154,29 @@ def test_dual_mode_components_and_stitch_consistency_contract() -> None:
         "24.1%",
         "1.8",
         "71s",
+        "Google Stitch",
+        "Antigravity",
+        "Google ADK",
     ]
     for token in canonical_tokens:
         assert token in all_deck_text, f"Missing canonical Stitch token: {token}"
 
-    # Verify Dual-Mode API + Fallback endpoints
+    # Verify sanitized Stitch wireframes are bundled for the end-to-end walkthrough
+    stitch_public_dir = SLIDES_DIR / "public" / "stitch"
+    for screen_letter in ("A", "B", "C", "D", "E", "F", "G"):
+        screen_path = stitch_public_dir / f"Screen-{screen_letter}.html"
+        assert screen_path.is_file(), f"Missing Stitch wireframe: {screen_path}"
+
+    # Verify Dual-Mode API + Fallback endpoints (including Screen E question -> ADK /assist)
     assert "http://localhost:8000/api/v1/checkin/sessions" in explorer_text
     assert "http://localhost:8000/api/v1/analytics/summary" in ops_text
+    assert "submitHelpQuery" in simulator_text
+    assert "/assist" in simulator_text
+
+    screen_e_html = (stitch_public_dir / "Screen-E.html").read_text(encoding="utf-8")
+    assert "stitch-help-form" in screen_e_html
+    assert "stitch-help-input" in screen_e_html
+    assert "/assist" in screen_e_html
 
 
 def test_no_file_urls_or_blocked_terms_in_slides_and_specs() -> None:

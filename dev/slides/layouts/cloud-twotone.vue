@@ -12,8 +12,7 @@ defineProps<{
   <div class="slidev-layout cloud-twotone">
     <div v-if="eyebrow" class="cs-eyebrow">{{ eyebrow }}</div>
     <h1 v-if="firstClause || accentClause" class="cs-display-twotone twotone-heading">
-      <span>{{ firstClause }} </span>
-      <span class="accent-clause">{{ accentClause }}</span>
+      <span>{{ firstClause }}</span>{{ ' ' }}<span class="accent-clause">{{ accentClause }}</span>
     </h1>
 
     <div class="twotone-body">
@@ -26,8 +25,9 @@ defineProps<{
 
 <style scoped>
 .twotone-heading {
-  font-size: 1.72rem;
-  line-height: 1.22;
+  font-size: 1.65rem;
+  line-height: 1.24;
+  letter-spacing: -0.01em;
   margin: 0 0 14px 0;
 }
 .twotone-body {

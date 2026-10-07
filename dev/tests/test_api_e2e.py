@@ -210,7 +210,7 @@ def test_frontend_ui_serving_and_stitch_sanitization(tmp_path: Path) -> None:
     assert "renderSeatCell" in js_body
     assert "/assist" in js_body
 
-    # Verify Help Hub /assist endpoint grounded in live session
+    # Verify Help Hub /assist endpoint grounded in live session with ADK tool metadata
     session_res = client.post("/api/v1/checkin/sessions", json={"persona_id": "marta_byrne"})
     sid = session_res.json()["session_id"]
 
@@ -221,6 +221,9 @@ def test_frontend_ui_serving_and_stitch_sanitization(tmp_path: Path) -> None:
     assert seat_query.status_code == 200
     seat_assist = seat_query.json()
     assert seat_assist["surface_token"] == "surface/ai"
+    assert seat_assist["agent_id"] == "help_hub_trip_assistant"
+    assert "inspect_family_seat_map" in seat_assist["invoked_tools"]
+    assert isinstance(seat_assist["latency_ms"], (int, float))
     assert "Row 12" in seat_assist["heading"] or "12A" in seat_assist["supporting_text"]
     assert seat_assist["guardrail_status"] == "PASS"
 
@@ -230,6 +233,32 @@ def test_frontend_ui_serving_and_stitch_sanitization(tmp_path: Path) -> None:
     )
     assert gate_query.status_code == 200
     gate_assist = gate_query.json()
+    assert "get_trip_and_ancillary_scores" in gate_assist["invoked_tools"]
     assert "Gate 104" in gate_assist["heading"] or "Gate 104" in gate_assist["supporting_text"]
+
+    # Natural-language basket mutation via main-screen question submission
+    add_prio_query = client.post(
+        f"/api/v1/checkin/sessions/{sid}/assist",
+        json={"query": "Add Priority boarding for all 4"},
+    )
+    assert add_prio_query.status_code == 200
+    prio_assist = add_prio_query.json()
+    assert prio_assist["state_mutated"] is True
+    assert "modify_basket_item" in prio_assist["invoked_tools"]
+    assert prio_assist["basket"]["total_eur"] == 76.00
+
+    # Natural-language ADK Live Simulation signal mutation via main-screen question submission
+    solo_sim_query = client.post(
+        f"/api/v1/checkin/sessions/{sid}/assist",
+        json={"query": "What if I travel solo for 1 night?"},
+    )
+    assert solo_sim_query.status_code == 200
+    solo_assist = solo_sim_query.json()
+    assert solo_assist["state_mutated"] is True
+    assert "update_simulation_signals" in solo_assist["invoked_tools"]
+    assert solo_assist["signals"]["trip_length_days"] == 1
+    assert solo_assist["signals"]["child_count"] == 0
+    assert solo_assist["session"]["funnel_summary"]["total_offer_pages"] == 0
+    assert solo_assist["session"]["entry_step_pill"] == "1 STEP"
 
 

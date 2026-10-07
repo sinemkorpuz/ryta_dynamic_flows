@@ -29,7 +29,7 @@ const footerTheme = computed(() => (isYellow.value ? 'yellow' : 'dark'))
 
 <template>
   <div
-    class="slidev-layout cloud-break"
+    :class="['slidev-layout', 'cloud-break', isYellow ? 'break-yellow' : 'break-dark']"
     :style="{ backgroundColor: bgMap[color], color: fgColor }"
   >
     <div class="break-grid">

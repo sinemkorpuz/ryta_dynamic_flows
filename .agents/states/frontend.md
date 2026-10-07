@@ -24,6 +24,7 @@ Active working context for the **Frontend Track** (Stitch → Single-Page App UI
 
 ## 3. Recent Session Handovers
 
+* [`../sessions/adk/2026-10-07_adk_live_simulation_assist.md`](../sessions/adk/2026-10-07_adk_live_simulation_assist.md) — Connected Screen E Help Hub question submission across `dev/ui/` and `dev/slides/` (`HelpHubSimulator.vue` and `Screen-E.html`) to `POST /api/v1/checkin/sessions/{id}/assist` and `ADK Live Simulation Controls`.
 * [`../sessions/frontend/2026-10-06_create-slidev-demo-deck.md`](../sessions/frontend/2026-10-06_create-slidev-demo-deck.md) — Generated the 14-slide Cloudstyle 2.0 Slidev presentation in `dev/slides/`, interactive Vue components, `.agents/skills/slidev-deck/SKILL.md`, and `dev/tests/test_slides_deck.py`.
 * [`../sessions/frontend/2026-10-06_import-and-wire-stitch-ui.md`](../sessions/frontend/2026-10-06_import-and-wire-stitch-ui.md) — Imported Stitch HTML screens (`Screen-A.html` to `Screen-G.html`), applied all 4 sanitization repairs, built `dev/ui/` SPA with Screen 10 analytics studio, and verified E2E tests.
 * [`../sessions/adk/2026-10-06_specify-dynamic-flows.md`](../sessions/adk/2026-10-06_specify-dynamic-flows.md) — Authored cross-track specifications and frontend user stories (`FE-001` to `FE-003`).

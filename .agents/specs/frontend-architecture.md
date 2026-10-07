@@ -105,10 +105,11 @@ When importing the exported Stitch prototype into `dev/ui/`, the following four 
 The frontend communicates exclusively with the FastAPI backend via typed fetch wrappers validating against `contracts/`:
 
 1. **Session Boot (`Screen E`):** Calls `POST /api/v1/checkin/sessions` with the selected `persona_id` (`"marta_byrne"` or `"zero_offer"`) and optional `signal_overrides` from the demo control bar. Renders `entry_step_pill` (`"2 STEPS TO YOUR BOARDING PASSES"` or `"1 STEP"`).
-2. **Offer Interactions (`Screens A & B`):** Calls `POST /api/v1/checkin/sessions/{id}/actions` when the user toggles Priority (`€76.00`), increments the 20kg Checked Bag stepper (`€39.99`), expands `"More extras (1)"`, or taps `"No thanks, continue →"`.
-3. **Seat Selection (`Screen F`):** Calls `GET /api/v1/checkin/sessions/{id}/seat-map` to render Row 12 (`12A–12D`) and child-restricted rows, and `POST /api/v1/checkin/sessions/{id}/seats` on `"Confirm seats"`.
-4. **Checkout & Boarding Passes (`Screens D & G`):** Calls `POST /api/v1/checkin/sessions/{id}/actions` (`action = "remove_item"`) for inline line-item removal on Review & Pay, and `POST /api/v1/checkin/sessions/{id}/checkout` to issue the 4 swipeable boarding passes with dynamic `PRIORITY` and `12A–12D` badges.
-5. **Analytics View (`Screen 10`):** Polls or fetches `GET /api/v1/analytics/summary` to display live session telemetry alongside the benchmark KPI tiles.
+2. **Help Hub Question Submission & ADK Live Simulation (`Screen E`):** Submitting a question or natural-language simulation prompt in the `"Ask or search for help with this trip"` search bar (or tapping a quick-ask chip) calls `POST /api/v1/checkin/sessions/{id}/assist`. The UI renders the `#F2F1FE` (`surface/ai`) response card with invoked ADK tool pills and latency, synchronizes `ADK Live Simulation Controls` sliders (`#sim-trip-days`, `#sim-children`, `#sim-priority`, `#sim-declines`) and `#adk-live-trace-bar` when `state_mutated == true`, and refreshes **Screen 10** analytics.
+3. **Offer Interactions (`Screens A & B`):** Calls `POST /api/v1/checkin/sessions/{id}/actions` when the user toggles Priority (`€76.00`), increments the 20kg Checked Bag stepper (`€39.99`), expands `"More extras (1)"`, or taps `"No thanks, continue →"`.
+4. **Seat Selection (`Screen F`):** Calls `GET /api/v1/checkin/sessions/{id}/seat-map` to render Row 12 (`12A–12D`) and child-restricted rows, and `POST /api/v1/checkin/sessions/{id}/seats` on `"Confirm seats"`.
+5. **Checkout & Boarding Passes (`Screens D & G`):** Calls `POST /api/v1/checkin/sessions/{id}/actions` (`action = "remove_item"`) for inline line-item removal on Review & Pay, and `POST /api/v1/checkin/sessions/{id}/checkout` to issue the 4 swipeable boarding passes with dynamic `PRIORITY` and `12A–12D` badges.
+6. **Analytics View (`Screen 10`):** Polls or fetches `GET /api/v1/analytics/summary` to display live session telemetry alongside the benchmark KPI tiles.
 
 ---
 

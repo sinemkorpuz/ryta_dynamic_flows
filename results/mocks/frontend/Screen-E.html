@@ -54,7 +54,22 @@
 <div class="relative z-10 pt-1">
   <h1 class="font-headline-lg text-headline-lg text-on-primary tracking-tight font-bold">Hi Marta,</h1>
   <p class="font-body-md text-body-md text-on-primary/80 mt-0.5">Let's get you checked in</p>
-<div class="bg-surface-page rounded-full px-4 py-2.5 flex items-center justify-between shadow-sm mt-4 text-text-body"><div class="flex items-center gap-2.5 flex-1 min-w-0 mr-2"><span class="material-symbols-outlined text-[20px] text-text-heading flex-shrink-0">search</span><span class="font-body-sm text-body-sm text-text-body truncate">Ask or search for help with this trip</span></div><button type="button" aria-label="Search" class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-text-heading flex-shrink-0 transition-colors hover:bg-surface-variant"><span class="material-symbols-outlined text-[18px]">arrow_forward</span></button></div></div></div>
+  <form id="stitch-help-form" class="bg-surface-page rounded-full pl-4 pr-1.5 py-1.5 flex items-center justify-between shadow-sm mt-4 text-text-body">
+    <div class="flex items-center gap-2.5 flex-1 min-w-0 mr-2">
+      <span class="material-symbols-outlined text-[20px] text-text-heading flex-shrink-0">search</span>
+      <input id="stitch-help-input" type="text" placeholder="Ask or search for help with this trip" aria-label="Ask or search for help with this trip" class="w-full bg-transparent border-none outline-none font-body-sm text-body-sm text-text-heading placeholder:text-text-body truncate" />
+    </div>
+    <button id="stitch-help-submit" type="submit" aria-label="Ask ADK Assistant" class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0 transition-colors hover:bg-primary-container">
+      <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+    </button>
+  </form>
+  <div class="flex flex-wrap gap-1.5 mt-2.5">
+    <button type="button" data-query="Are we sitting together with the children?" class="stitch-quick-chip text-[11px] font-semibold bg-on-primary/15 hover:bg-on-primary/25 text-on-primary border border-on-primary/25 rounded-full px-2.5 py-1 transition-colors">Sitting with children?</button>
+    <button type="button" data-query="What cabin and 20kg bags do we have?" class="stitch-quick-chip text-[11px] font-semibold bg-on-primary/15 hover:bg-on-primary/25 text-on-primary border border-on-primary/25 rounded-full px-2.5 py-1 transition-colors">Cabin &amp; 20kg bags?</button>
+    <button type="button" data-query="What if I travel solo for 1 night?" class="stitch-quick-chip text-[11px] font-semibold bg-on-primary/15 hover:bg-on-primary/25 text-on-primary border border-on-primary/25 rounded-full px-2.5 py-1 transition-colors">⚡ Solo 1-night?</button>
+    <button type="button" data-query="Add Priority boarding for all 4" class="stitch-quick-chip text-[11px] font-semibold bg-on-primary/15 hover:bg-on-primary/25 text-on-primary border border-on-primary/25 rounded-full px-2.5 py-1 transition-colors">+ Add Priority</button>
+  </div>
+</div></div>
 <!-- Content Body Container -->
 <div class="px-margin flex flex-col gap-space-lg -mt-3 relative z-20">
 <!-- Step Progress Indicator Capsule -->
@@ -64,8 +79,8 @@
 <span class="material-symbols-outlined text-[17px]">checklist</span>
 </div>
 <div class="flex flex-col min-w-0">
-<span class="font-label-sm text-label-sm text-primary tracking-wider uppercase font-bold truncate">2 Steps to your boarding passes</span>
-<span class="font-body-sm text-body-sm text-text-body truncate">Confirm IDs &amp; select seats next</span>
+<span id="stitch-step-title" class="font-label-sm text-label-sm text-primary tracking-wider uppercase font-bold truncate">2 Steps to your boarding passes</span>
+<span id="stitch-step-subtitle" class="font-body-sm text-body-sm text-text-body truncate">Confirm IDs &amp; select seats next</span>
 </div>
 </div>
 <div class="flex items-center gap-1 flex-shrink-0 pl-2">
@@ -73,6 +88,8 @@
 <div class="w-2.5 h-1.5 rounded-full bg-surface-container-high"></div>
 </div>
 </div>
+<!-- Proactive Intelligence Assistant Note -->
+<div id="stitch-adk-response-container" class="hidden bg-surface-ai border border-tertiary-fixed-dim rounded-xl p-3.5 shadow-xs"></div>
 <!-- Flight Entity Card -->
 <div class="bg-surface-page rounded-xl p-4 shadow-sm border-hairline relative">
 <div class="flex items-start justify-between gap-space-sm mb-3">
@@ -112,7 +129,6 @@
 </div>
 </div>
 </div>
-<!-- Proactive Intelligence Assistant Note -->
 
 <!-- Passenger Roster Section -->
 <div class="flex flex-col gap-space-sm">
@@ -230,6 +246,147 @@
 </div>
 <script>
   (function() {
+    let liveSessionId = null;
+    const form = document.getElementById('stitch-help-form');
+    const input = document.getElementById('stitch-help-input');
+    const responseBox = document.getElementById('stitch-adk-response-container');
+    const stepTitle = document.getElementById('stitch-step-title');
+    const stepSubtitle = document.getElementById('stitch-step-subtitle');
+
+    function renderResponse(data) {
+      if (!responseBox) return;
+      const tools = Array.isArray(data.invoked_tools) && data.invoked_tools.length > 0
+        ? data.invoked_tools
+        : ['get_trip_and_ancillary_scores'];
+      const latency = Math.round(data.latency_ms || 39);
+      const model = data.model || 'gemini-3.8-flash';
+      const toolBadges = tools.map(function(t) {
+        return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-surface-page text-tertiary-container border border-tertiary-fixed-dim font-mono">⚙ ' + t + '</span>';
+      }).join('');
+
+      responseBox.classList.remove('hidden');
+      responseBox.innerHTML =
+        '<div class="flex items-start justify-between gap-2">' +
+          '<div class="flex items-center gap-1.5 text-tertiary-container font-title-md text-[14px] font-bold">' +
+            '<span>✦</span><span>' + data.headline + '</span>' +
+          '</div>' +
+          '<button type="button" id="stitch-adk-dismiss" class="text-tertiary-container font-bold text-sm px-1">×</button>' +
+        '</div>' +
+        '<p class="font-body-sm text-body-sm text-text-body mt-1 leading-snug">' + data.subtext + '</p>' +
+        '<div class="flex flex-wrap gap-1.5 mt-2">' +
+          '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-pill-next-bg text-pill-next-text">ADK · ' + model + ' · ' + latency + 'ms</span>' +
+          toolBadges +
+        '</div>';
+
+      const dismissBtn = document.getElementById('stitch-adk-dismiss');
+      if (dismissBtn) {
+        dismissBtn.addEventListener('click', function() {
+          responseBox.classList.add('hidden');
+        });
+      }
+    }
+
+    async function submitAssistQuery(rawQuery) {
+      const q = (rawQuery || '').trim();
+      if (!q) return;
+      if (input) input.value = q;
+
+      try {
+        if (!liveSessionId) {
+          const createRes = await fetch('http://localhost:8000/api/v1/checkin/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ booking_ref: 'X8Y9QL', persona_preset: 'marta_byrne' })
+          });
+          if (createRes.ok) {
+            const created = await createRes.json();
+            liveSessionId = created.session_id;
+          }
+        }
+        if (liveSessionId) {
+          const assistRes = await fetch('http://localhost:8000/api/v1/checkin/sessions/' + liveSessionId + '/assist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: q })
+          });
+          if (assistRes.ok) {
+            const payload = await assistRes.json();
+            renderResponse(payload);
+            if (payload.state_mutated && payload.session && payload.session.funnel_summary) {
+              const offerPages = payload.session.funnel_summary.total_offer_pages;
+              if (stepTitle && stepSubtitle) {
+                stepTitle.textContent = offerPages === 0 ? '1 Step to your boarding passes' : '2 Steps to your boarding passes';
+                stepSubtitle.textContent = offerPages === 0 ? 'Zero-offer fast path active' : 'Confirm IDs & select seats next';
+              }
+            }
+            return;
+          }
+        }
+      } catch (_e) {
+        // Fallback when running standalone without localhost:8000
+      }
+
+      const lower = q.toLowerCase();
+      if (lower.includes('solo') || lower.includes('1 night') || lower.includes('1-night')) {
+        if (stepTitle && stepSubtitle) {
+          stepTitle.textContent = '1 Step to your boarding passes';
+          stepSubtitle.textContent = 'Zero-offer fast path active';
+        }
+        renderResponse({
+          headline: 'Simulated: Solo 1-night trip (1 STEP)',
+          subtext: "I've updated the ADK simulation to a 1-night solo trip (0 children, 0× Priority history). Zero ancillaries pass the 0.10 floor, compressing the funnel to 0 offer pages.",
+          invoked_tools: ['update_simulation_signals', 'get_trip_and_ancillary_scores'],
+          latency_ms: 38,
+          model: 'gemini-3.8-flash'
+        });
+      } else if (lower.includes('add priority')) {
+        renderResponse({
+          headline: 'Priority & 2 Cabin Bags added (€76.00)',
+          subtext: "I've added Priority & 2 Cabin Bags (€19.00 × 4 passengers = €76.00) to your basket via the ADK basket tool.",
+          invoked_tools: ['modify_basket_item', 'get_trip_and_ancillary_scores'],
+          latency_ms: 35,
+          model: 'gemini-3.8-flash'
+        });
+      } else if (lower.includes('seat') || lower.includes('child') || lower.includes('sit')) {
+        renderResponse({
+          headline: 'Family seating in Row 12 (12A–12D)',
+          subtext: "I've pre-selected contiguous seats 12A–12D for Marta, Declan, Fia (6), and Oisín (9) at €6.00 per seat (€24.00 total). Overwing Exit Row 16 is restricted for under-16s.",
+          invoked_tools: ['inspect_family_seat_map', 'get_trip_and_ancillary_scores'],
+          latency_ms: 44,
+          model: 'gemini-3.8-flash'
+        });
+      } else if (lower.includes('bag') || lower.includes('20kg') || lower.includes('cabin')) {
+        renderResponse({
+          headline: 'Cabin & 20kg hold bag options',
+          subtext: 'Value fare includes 1 small under-seat bag each. For 7 nights in Faro, Priority & 2 Cabin Bags is €76.00 (€19 × 4, score 0.84) and a shared 20kg Checked Bag is €39.99 (score 0.58).',
+          invoked_tools: ['get_trip_and_ancillary_scores'],
+          latency_ms: 39,
+          model: 'gemini-3.8-flash'
+        });
+      } else {
+        renderResponse({
+          headline: 'Flight FR1234 (DUB → FAO) is ready',
+          subtext: 'Passports for all 4 passengers are verified for Gate 104 (departs 06:35). You are 2 steps away from your boarding passes.',
+          invoked_tools: ['get_trip_and_ancillary_scores'],
+          latency_ms: 36,
+          model: 'gemini-3.8-flash'
+        });
+      }
+    }
+
+    if (form) {
+      form.addEventListener('submit', function(ev) {
+        ev.preventDefault();
+        if (input) submitAssistQuery(input.value);
+      });
+    }
+    document.querySelectorAll('.stitch-quick-chip').forEach(function(chip) {
+      chip.addEventListener('click', function() {
+        const q = this.getAttribute('data-query');
+        if (q) submitAssistQuery(q);
+      });
+    });
+
     const checkinBtn = document.getElementById('start-checkin-btn');
     if (checkinBtn) {
       checkinBtn.addEventListener('click', function() {

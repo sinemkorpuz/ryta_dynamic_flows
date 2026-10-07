@@ -278,10 +278,12 @@
               </button>
             </div>
 
-            <!-- Quick-Ask Grounded Chips -->
+            <!-- Quick-Ask Grounded & ADK Simulation Chips -->
             <div class="flex items-center gap-1.5 mt-2.5 overflow-x-auto no-scrollbar">
               <button type="button" data-quick-ask="Sitting with children?" class="quick-ask-chip px-2.5 py-1 rounded-full bg-on-primary/10 hover:bg-on-primary/20 text-[11px] font-medium text-on-primary whitespace-nowrap transition-colors">Sitting with children?</button>
               <button type="button" data-quick-ask="Cabin & 20kg bag rules?" class="quick-ask-chip px-2.5 py-1 rounded-full bg-on-primary/10 hover:bg-on-primary/20 text-[11px] font-medium text-on-primary whitespace-nowrap transition-colors">Cabin &amp; 20kg bags?</button>
+              <button type="button" data-quick-ask="What if I travel solo for 1 night?" class="quick-ask-chip px-2.5 py-1 rounded-full bg-secondary-container/90 hover:bg-secondary-container text-[11px] font-bold text-on-secondary-fixed whitespace-nowrap transition-colors">⚡ Solo 1-night?</button>
+              <button type="button" data-quick-ask="Add Priority boarding for all 4" class="quick-ask-chip px-2.5 py-1 rounded-full bg-on-primary/10 hover:bg-on-primary/20 text-[11px] font-medium text-on-primary whitespace-nowrap transition-colors">+ Add Priority</button>
               <button type="button" data-quick-ask="Gate & departure info?" class="quick-ask-chip px-2.5 py-1 rounded-full bg-on-primary/10 hover:bg-on-primary/20 text-[11px] font-medium text-on-primary whitespace-nowrap transition-colors">Gate &amp; terminal?</button>
             </div>
           </div>
@@ -293,19 +295,39 @@
             state.helpHubResponse
               ? `
           <!-- Grounded ADK Help Hub Response Card (surface/ai #F2F1FE) -->
-          <div class="rounded-[18px] bg-surface-ai p-3.5 shadow-sm border border-[#4B2EDB]/15 flex items-start justify-between gap-2.5">
-            <div class="flex items-start gap-2.5 min-w-0">
-              <div class="w-8 h-8 rounded-full bg-[#4B2EDB] flex items-center justify-center text-on-primary shrink-0 mt-0.5">
-                <span class="material-symbols-outlined text-[17px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+          <div class="rounded-[18px] bg-surface-ai p-3.5 shadow-sm border border-[#4B2EDB]/15 flex flex-col gap-2">
+            <div class="flex items-start justify-between gap-2.5">
+              <div class="flex items-start gap-2.5 min-w-0">
+                <div class="w-8 h-8 rounded-full bg-[#4B2EDB] flex items-center justify-center text-on-primary shrink-0 mt-0.5">
+                  <span class="material-symbols-outlined text-[17px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <span class="font-title-md text-title-md text-[#4B2EDB] font-bold">${state.helpHubResponse.heading}</span>
+                  <p class="font-body-sm text-body-sm text-text-body mt-0.5">${state.helpHubResponse.supporting_text}</p>
+                </div>
               </div>
-              <div class="flex flex-col min-w-0">
-                <span class="font-title-md text-title-md text-[#4B2EDB] font-bold">${state.helpHubResponse.heading}</span>
-                <p class="font-body-sm text-body-sm text-text-body mt-0.5">${state.helpHubResponse.supporting_text}</p>
-              </div>
+              <button id="close-help-hub-card" type="button" aria-label="Dismiss" class="text-text-body hover:text-text-heading p-1">
+                <span class="material-symbols-outlined text-[16px]">close</span>
+              </button>
             </div>
-            <button id="close-help-hub-card" type="button" aria-label="Dismiss" class="text-text-body hover:text-text-heading p-1">
-              <span class="material-symbols-outlined text-[16px]">close</span>
-            </button>
+            <div class="flex items-center justify-between flex-wrap gap-1.5 pt-1.5 border-t border-[#4B2EDB]/10 text-[10px]">
+              <div class="flex items-center gap-1 flex-wrap">
+                <span class="px-2 py-0.5 rounded-full bg-[#4B2EDB]/10 text-[#4B2EDB] font-bold">ADK · ${
+                  typeof state.helpHubResponse.latency_ms === "number"
+                    ? `${state.helpHubResponse.latency_ms.toFixed(1)}ms`
+                    : "Live"
+                }</span>
+                ${(state.helpHubResponse.invoked_tools || [])
+                  .map(
+                    (t) =>
+                      `<span class="px-2 py-0.5 rounded-full bg-white text-primary-container font-mono font-semibold border border-border-hairline">${t}()</span>`
+                  )
+                  .join("")}
+              </div>
+              <span class="text-pill-done-text font-bold">✓ Guardrail ${
+                state.helpHubResponse.guardrail_status || "PASS"
+              }</span>
+            </div>
           </div>
           `
               : ""
@@ -441,6 +463,37 @@
     `;
   }
 
+  function syncSignalsToStudioControls(signals) {
+    if (!signals) return;
+    const pSlider = document.getElementById("sig-prior-priority");
+    const cSlider = document.getElementById("sig-children");
+    const nSlider = document.getElementById("sig-nights");
+    if (pSlider && typeof signals.prior_priority_trips === "number") {
+      pSlider.value = String(signals.prior_priority_trips);
+      const valEl = document.getElementById("val-prior-priority");
+      if (valEl) valEl.textContent = `${signals.prior_priority_trips} / 4`;
+    }
+    if (cSlider && typeof signals.children_count === "number") {
+      cSlider.value = String(signals.children_count);
+      const valEl = document.getElementById("val-children");
+      if (valEl) valEl.textContent = `${signals.children_count} kids`;
+    }
+    if (nSlider && typeof signals.trip_nights === "number") {
+      nSlider.value = String(signals.trip_nights);
+      const valEl = document.getElementById("val-nights");
+      if (valEl) valEl.textContent = `${signals.trip_nights} nights`;
+    }
+    if (signals.persona_id) {
+      state.personaId = signals.persona_id;
+      document.querySelectorAll(".persona-preset-btn").forEach((b) => {
+        b.className =
+          b.getAttribute("data-persona") === signals.persona_id
+            ? "persona-preset-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-primary-container text-white shadow-xs transition-all"
+            : "persona-preset-btn px-3.5 py-1.5 rounded-full text-xs font-bold bg-surface-container-low text-text-heading hover:bg-surface-container-high transition-all";
+      });
+    }
+  }
+
   async function submitHelpHubQuery(rawQuery) {
     const q = (rawQuery || "").trim() || "Tell me about this flight and seating";
     state.helpHubLoading = true;
@@ -454,11 +507,29 @@
         }
       );
       state.helpHubResponse = res;
+      if (res.session) {
+        state.sessionData = res.session;
+      }
+      if (res.basket) {
+        state.basketData = res.basket;
+      }
+      if (res.signals) {
+        syncSignalsToStudioControls(res.signals);
+      }
+      const latencyBadge = document.getElementById("latency-badge");
+      if (latencyBadge && typeof res.latency_ms === "number") {
+        latencyBadge.textContent = `ADK Assist · ${res.latency_ms.toFixed(1)}ms`;
+      }
+      await refreshAnalytics();
+      if (res.state_mutated) {
+        showToast(`ADK updated simulation: ${res.heading}`);
+      }
     } catch (err) {
       showToast(`Help Hub error: ${err.message}`);
     } finally {
       state.helpHubLoading = false;
       renderCurrentScreen();
+      renderStudioAnalytics();
     }
   }
 
@@ -1781,6 +1852,50 @@
   function renderStudioAnalytics() {
     const a = state.analyticsData;
     const s = state.sessionData;
+
+    const traceBar = document.getElementById("adk-live-trace-bar");
+    if (traceBar) {
+      const hh = state.helpHubResponse;
+      if (hh) {
+        const toolsHtml = (hh.invoked_tools || [])
+          .map(
+            (t) =>
+              `<span class="px-2 py-0.5 rounded-full bg-white text-primary-container font-mono font-semibold border border-border-hairline">${t}()</span>`
+          )
+          .join("");
+        traceBar.innerHTML = `
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <span class="inline-flex items-center gap-1.5 font-bold text-[#4B2EDB]">
+              <span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+              <span>ADK Agent (<code>${hh.agent_id || "help_hub_trip_assistant"}</code> · <code>${hh.model || "gemini-flash"}</code>)</span>
+            </span>
+            <span class="px-2 py-0.5 rounded-full bg-pill-done-bg text-pill-done-text font-bold text-[11px]">
+              ${hh.source === "adk_gemini_flash" ? "⚡ Live ADK Runner" : "✓ Grounded ADK Tools"} · ${
+          typeof hh.latency_ms === "number" ? `${hh.latency_ms.toFixed(1)}ms` : "OK"
+        }
+            </span>
+          </div>
+          <div class="text-text-heading font-medium">
+            <span class="text-text-body">Screen E Query:</span> "${hh.query}" → <strong class="text-[#4B2EDB]">${hh.heading}</strong>
+          </div>
+          <div class="flex items-center gap-1.5 flex-wrap pt-0.5">
+            <span class="text-[11px] text-text-body font-semibold">Invoked Tools:</span>
+            ${toolsHtml || `<span class="text-[11px] text-text-body">score_ancillaries()</span>`}
+          </div>
+        `;
+      } else {
+        traceBar.innerHTML = `
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <span class="inline-flex items-center gap-1.5 font-bold text-[#4B2EDB]">
+              <span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+              <span>ADK Help Hub Agent (<code>help_hub_trip_assistant</code>)</span>
+            </span>
+            <span class="text-[11px] font-semibold text-text-body">Submit a question on Screen E to run ADK tools live</span>
+          </div>
+        `;
+      }
+    }
+
     if (!a) return;
 
     const countersEl = document.getElementById("live-counters-strip");

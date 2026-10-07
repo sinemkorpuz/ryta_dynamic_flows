@@ -1,186 +1,65 @@
 ---
 layout: cloud-break
 color: green
-sectionNo: "02"
-title: "Hybrid ADK & Deterministic Scoring Architecture"
-subtitle: "Decoupling stateless Python domain tools (<10ms) from ADK Gemini 3.8 Flash copy synthesis with a hard 220ms circuit breaker."
+sectionNo: "01"
+title: "System & Google ADK Architecture"
+subtitle: "Establishing the end-to-end system topology and Google ADK agent internals before walking through the passenger screens."
 ---
 
 <div class="subtopic-row">
   <div>
-    <span class="subtopic-title">ADR-01: Hybrid ADK + Deterministic Tools vs. Pure End-to-End LLM</span>
-    <span class="subtopic-meta">100% euro pricing accuracy (`€76.00`, `€24.00`, `€39.99`), zero regulatory leakage, and ~57ms deterministic execution</span>
+    <span class="subtopic-title">System Architecture Overview: Design-Time Pipeline &amp; 4-Tier Runtime Topology</span>
+    <span class="subtopic-meta">How <code>Google Stitch</code> &amp; <code>Antigravity</code> feed the live stack: <code>Client Tier</code> → <code>Cloud Load Balancer</code> → <code>FastAPI Server</code> → <code>Google ADK</code></span>
   </div>
   <span class="subtopic-icon">→</span>
 </div>
 
 <div class="subtopic-row">
   <div>
-    <span class="subtopic-title">Four Sequential Eligibility &amp; Suppression Gates (`dev/tools/eligibility_rules.py`)</span>
-    <span class="subtopic-meta">`INELIGIBLE_ROUTE_PRODUCT`, `INELIGIBLE_TIME_WINDOW`, `SUPPRESSED_DECLINE_STREAK`, and `BELOW_DISPLAY_FLOOR`</span>
+    <span class="subtopic-title">Google ADK Agent Internals, Declarative Skills &amp; Deterministic Tools Workflow</span>
+    <span class="subtopic-meta">Inside the <code>~57ms</code> execution loop: <code>ADKOrchestrator</code>, 3 skills, 4 sub-<code>10ms</code> domain tools, <code>gemini-3.8-flash</code> &amp; <code>220ms</code> circuit breaker</span>
   </div>
   <span class="subtopic-icon">→</span>
 </div>
 
 <div class="subtopic-row">
   <div>
-    <span class="subtopic-title">Live Propensity &amp; Signal Override Explorer (`POST /api/v1/checkin/sessions`)</span>
-    <span class="subtopic-meta">Interactive recalculation of propensity scores, rule removals, and 0-to-2 page packing</span>
+    <span class="subtopic-title">Bridging Architecture to the End-to-End User Journey Walkthrough</span>
+    <span class="subtopic-meta">Seeing how every tool and guardrail drives Marta Byrne's 7 generated Stitch wireframes (<code>Screens E, A, F, B, D, C, G</code>)</span>
   </div>
   <span class="subtopic-icon">→</span>
 </div>
 
 <!--
-PURPOSE: Introduce Act III using the official Cloudstyle Green (#34A853) full-bleed Break Slide (Slide 08 archetype).
-VERBAL SCRIPT: In Act III, we examine the engineering architecture behind the scenes. We will look at why we chose a hybrid architecture that pairs deterministic Python tools for scoring, pricing, and child seating safety with a Google ADK Gemini 3.8 Flash agent for first-person assistant copy—and then we will experiment with live signal overrides right on the slide.
-TRANSITION: Let's compare our hybrid ADK pipeline against a pure LLM approach and trace the runtime sequence.
+PURPOSE: Introduce Section 01 — presenting the end-to-end system architecture diagram and the deep-dive Google ADK agent/skills/tools workflow diagram up front so the audience has the full technical mental model before stepping through the UI wireframes.
+VERBAL SCRIPT: Before we walk through the mobile screens, let's establish the technical mental model of what Google Stitch, Antigravity, and Google ADK built. In this section, we first look at the end-to-end System Architecture topology across our Client Tier, Cloud Load Balancer, FastAPI Application Server, and Google ADK runtime. Second, we zoom into the Google ADK Agent Internals to see how the orchestrator, three declarative skills, and four deterministic tools collaborate in under 60 milliseconds. Having this architecture in mind will make every step of Marta Byrne's wireframe journey immediately clear.
+TRANSITION: Let's start with the end-to-end System Architecture Overview diagram on Slide 07.
 -->
 
 ---
-layout: cloud-sidebar-table
-title: "Decoupling deterministic propensity tools from ADK copy synthesis guarantees zero price hallucinations and sub-300ms latency."
-eyebrow: "ARCHITECTURAL TRADE-OFF MATRIX · TABLE B"
+layout: default
+eyebrow: "SYSTEM ARCHITECTURE OVERVIEW · CLIENT → LOAD BALANCER → FASTAPI SERVER → GOOGLE ADK"
+title: "End-to-End System Topology: How Stitch UI clients, Cloud Load Balancer, FastAPI, and Google ADK connect."
 ---
 
-<template #sidebar>
-  <p>
-    <strong>Strict Separation of Concerns (Rule 3):</strong> <code>dev/core/</code> is 100% domain-agnostic (FastAPI, ADK Runner, <code>220ms</code> circuit breaker, and OpenTelemetry middleware).
-  </p>
-  <p class="mt-2">
-    All airline scoring formulas, euro prices, Boeing 737 child seating rules, and fallback templates live in <code>dev/tools/</code> and <code>dev/skills/</code>.
-  </p>
-  <div class="pipeline-mini">
-    <div>1. <code>propensity_scorer.py</code> (&lt;5ms)</div>
-    <div>2. <code>eligibility_rules.py</code> (&lt;3ms)</div>
-    <div>3. <code>seat_allocator.py</code> (Row 12, &lt;4ms)</div>
-    <div>4. <code>page_builder</code> Skill (0–2 pages)</div>
-    <div>5. <code>assistant_copy</code> ADK (≤220ms cap)</div>
-  </div>
-</template>
-
-<table class="cs-table-b">
-  <thead>
-    <tr>
-      <th class="corner-empty">Quality Dimension</th>
-      <th>Hybrid ADK + Deterministic Tools (Chosen)</th>
-      <th>Pure End-to-End LLM Scoring (Rejected)</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td class="row-header">Server Latency (p95)</td>
-      <td><strong>~57ms</strong> deterministic core + <strong>220ms</strong> circuit breaker (<strong>≤ 300ms SLA guaranteed</strong>)</td>
-      <td>850ms – 2,400ms multi-step token generation; violates 300ms mobile check-in budget.</td>
-    </tr>
-    <tr>
-      <td class="row-header">Euro Pricing &amp; Totals</td>
-      <td><strong>100% exact</strong> (<code>€76.00</code>, <code>€24.00</code>, <code>€39.99</code>, <code>€139.99</code> via <code>basket_pricing.py</code>)</td>
-      <td>Risk of arithmetic drift or hallucinated per-passenger multipliers.</td>
-    </tr>
-    <tr>
-      <td class="row-header">Child &amp; Route Safety</td>
-      <td><strong>0% leakage</strong>: hard code gates block Exit Row 16 for ages 6 &amp; 9 and strip FAO Fast Track.</td>
-      <td>Prompt injection or model non-determinism could surface ineligible products.</td>
-    </tr>
-    <tr>
-      <td class="row-header">Resilience / Fallback</td>
-      <td>Automatic <strong>220ms circuit breaker</strong> falls back to deterministic first-person templates (`100% HTTP 200`).</td>
-      <td>Upstream HTTP 429/503 or tail latency stalls check-in initialization.</td>
-    </tr>
-    <tr>
-      <td class="row-header">Personalization Copy</td>
-      <td><strong>ADK <code>gemini-3.8-flash</code></strong> synthesizes warm first-person copy grounded in top propensity drivers.</td>
-      <td>Unconstrained prose risks violating the 18-word card limit or using forbidden urgency terms.</td>
-    </tr>
-  </tbody>
-</table>
-
-<style>
-.pipeline-mini {
-  margin-top: 10px;
-  background: #F8F9FA;
-  border: 1px solid #E8EAED;
-  padding: 8px 10px;
-  font-family: var(--cs-font-mono);
-  font-size: 0.7rem;
-  line-height: 1.55;
-  color: #185ABC;
-}
-</style>
+<SystemOverviewDiagram />
 
 <!--
-PURPOSE: Explain Architectural Decision Record ADR-01 (Hybrid ADK + Deterministic Tools vs. Pure LLM) using the Cloudstyle Sidebar Commentary + Table B matrix (Slide 27 archetype).
-VERBAL SCRIPT: A critical architectural question in agentic systems is what belongs in deterministic code versus what belongs in the LLM. In ryta, propensity scoring, euro pricing, Boeing 737 child seating adjacency, and the four removal gates run as pure, stateless Python tools in under 15 milliseconds—giving us 100% pricing accuracy and zero regulatory leakage. We then invoke our Google ADK Gemini 3.8 Flash skill strictly to synthesize the warm, first-person insight copy inside a hard 220-millisecond circuit breaker. If the upstream LLM ever exceeds 220 milliseconds, the circuit breaker immediately populates verified first-person template copy so p95 latency never exceeds 300 milliseconds.
-TRANSITION: Let's interact with the propensity scorer and rule gates live on the next slide.
+PURPOSE: Present the complete end-to-end system architecture diagram covering design-time co-generation (Customer Screenshots -> Google Stitch -> Contracts -> Antigravity) at the top and live 4-tier runtime execution (Client Tier -> Cloud Load Balancer -> FastAPI Application Server -> Google ADK, Skills & Tools) below.
+VERBAL SCRIPT: This diagram gives you the complete system component view—and you can click any of the four tiers to isolate and inspect it. Across the top is our Design-Time Pipeline: customer reference screenshots flow into Google Stitch to produce the seven mobile HTML wireframes, while shared specifications and JSON Schemas in the contracts folder instruct Antigravity to co-generate the server, ADK agent, and tools. Below is our live 4-tier runtime topology. Tier 1 on the left is the Client Tier: the Ryanair App 2026 Help Hub mobile client and the Screen 10 web analytics dashboard. Tier 2 is our Cloud Load Balancer handling HTTPS termination, API path routing under a 300-millisecond p95 SLA, and static asset delivery. Tier 3 is our FastAPI Application Server housing the CheckinFlowService, in-memory Session Store, ADKOrchestrator with its 220-millisecond circuit breaker, and OpenTelemetry trace emitter. And Tier 4 on the right is the Google ADK runtime combining three declarative skills, the Gemini Flash agent, and four deterministic domain tools.
+TRANSITION: Now let's zoom into Tier 4 on Slide 08 to inspect the internal Google ADK agent and tool execution workflow.
 -->
 
 ---
-layout: cloud-split
-eyebrow: "LIVE PROPENSITY & RULE ENGINE · POST /api/v1/checkin/sessions"
-title: "Live Propensity & Rule Explorer: Real-time signal overrides recalculate scores, rule gates, and page packing in <60ms."
-ratio: "40-60"
+layout: default
+eyebrow: "GOOGLE ADK AGENT INTERNALS · ORCHESTRATOR, DECLARATIVE SKILLS, TOOLS & GUARDRAILS"
+title: "Google ADK Execution Workflow: How the agent, 3 skills, and 4 deterministic tools execute check-in in ~57ms."
 ---
 
-<template #left>
-  <div class="rules-panel">
-    <p class="cs-commentary">
-      <strong>Drag the signal sliders on the right</strong> to override passenger context and watch the 8 candidate ancillaries re-rank dynamically:
-    </p>
-    <div class="gate-cards">
-      <div class="g-card">
-        <div class="g-code">1 · INELIGIBLE_ROUTE_PRODUCT</div>
-        <div>Strips <strong>Fast Track (`0.14`)</strong> because return-leg Fast Track is not sold at Faro (`FAO`).</div>
-      </div>
-      <div class="g-card">
-        <div class="g-code">2 · INELIGIBLE_TIME_WINDOW</div>
-        <div>Strips <strong>Flexi Upgrade (`0.04`)</strong> when <code>hours_to_departure ≤ 48</code>.</div>
-      </div>
-      <div class="g-card">
-        <div class="g-code">3 · SUPPRESSED_DECLINE_STREAK</div>
-        <div>Strips <strong>Travel Insurance (`0.11`)</strong> after <code>6 consecutive declines</code> (or current-session decline).</div>
-      </div>
-      <div class="g-card">
-        <div class="g-code">4 · BELOW_DISPLAY_FLOOR</div>
-        <div>Strips <strong>Airport Transfer (`0.08`)</strong> below <code>0.10</code>; items in <code>0.10–0.49</code> (`Car Hire 0.29`) demote to the Page 2 drawer.</div>
-      </div>
-    </div>
-  </div>
-</template>
-
-<template #right>
-  <LiveScoringExplorer />
-</template>
-
-<style>
-.rules-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.gate-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.g-card {
-  background: #F8F9FA;
-  border: 1px solid #E8EAED;
-  border-left: 3px solid #34A853;
-  padding: 6px 9px;
-  font-size: 0.72rem;
-  line-height: 1.36;
-}
-.g-code {
-  font-family: var(--cs-font-mono);
-  font-size: 9.5px;
-  font-weight: 700;
-  color: #137333;
-  margin-bottom: 2px;
-}
-</style>
+<AdkWorkflowDiagram />
 
 <!--
-PURPOSE: Demonstrate live propensity score recalculation and the four deterministic eligibility/suppression gates using the embedded LiveScoringExplorer component.
-VERBAL SCRIPT: On this slide, you can drag the sliders for Priority purchase history, number of children, and trip length, or click the preset buttons. In Marta's baseline, Priority scores 0.84, Row 12 seats score 0.71, the 20kg bag scores 0.58, and Car Hire scores 0.29—packing cleanly into two offer pages with Car Hire demoted into the drawer. Meanwhile, the four red pills at the bottom show the exact deterministic rule codes that stripped Fast Track, Travel Insurance, Airport Transfer, and Flexi Upgrade. If you click the "Solo 1-Night" preset, watch all primary cards drop below the 0.50 promotion threshold—automatically compressing the funnel.
-TRANSITION: Let's move to Act IV to see how every execution emits schema-validated telemetry into the Screen 10 feedback loop and how we co-evolve this deck.
+PURPOSE: Walk through the detailed internal execution workflow inside the Google ADK layer, showing how the ADKOrchestrator, the 3 declarative skills (ancillary_ranking, page_builder, assistant_copy), the 4 deterministic tools, and the 220ms guardrail circuit breaker interact.
+VERBAL SCRIPT: Here we zoom directly into the Google ADK internals that run when a passenger starts check-in or asks a question. Execution flows across four functional zones—and you can click any zone to highlight its components. In Zone 1 on the left, FastAPI calls the ADKOrchestrator, which resolves Booking X8Y9QL in under 2 milliseconds and coordinates three declarative skills: ancillary_ranking, page_builder, and assistant_copy. In Zone 2 in the center, those skills invoke four deterministic Python tools in under 10 milliseconds total: Tool 1 scores all 8 ancillaries, Tool 2 enforces four hard protection gates, Tool 3 runs the Boeing 737 cabin seat allocator for Row 12 with child exit-row locks, and Tool 4 computes exact euro basket totals with zero hallucination risk. In Zone 3 on the top right, the assistant_copy skill passes the grounded tool outputs into our Google ADK Gemini Flash agent to synthesize warm, first-person guidance. And in Zone 4 on the bottom right, a 220-millisecond circuit breaker and our ethical copy validator verify the output before emitting a schema-valid OpenTelemetry trace back to the client.
+TRANSITION: Now that we have seen both the system topology and the ADK agent internals, let's trace this exact pipeline in action across Marta Byrne's end-to-end user journey and Stitch wireframes.
 -->

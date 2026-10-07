@@ -337,15 +337,87 @@ class CheckinFlowService:
         return deepcopy(state["response"])
 
     def assist_session(self, session_id: str, query: str) -> dict[str, Any]:
-        """Answer a Help Hub trip question grounded in the session's live booking and basket."""
+        """Answer a Help Hub trip question and execute ADK tools grounded in the session's live state."""
         state = self._require_session(session_id)
+        context = state["context"]
+
+        def _mutate_signals(overrides: dict[str, Any]) -> dict[str, Any]:
+            base_persona = (
+                "zero_offer"
+                if overrides.get("force_zero_offer")
+                else "marta_byrne"
+            )
+            signals = resolve_signals(persona_id=base_persona, signal_overrides=overrides)
+            state["signals"] = signals
+            evaluated = rank_and_filter_ancillaries(
+                signals=signals,
+                declined_product_ids=state["declined_product_ids"],
+                context=context,
+                telemetry=self.telemetry,
+            )
+            pages = self._assemble_pages(
+                evaluated=evaluated,
+                signals=signals,
+                selected_quantities=state["selected_quantities"],
+                context=context,
+            )
+            resp = state["response"]
+            resp["persona_id"] = base_persona
+            resp["ranked_ancillaries"] = evaluated
+            resp["pages"] = pages
+            resp["booking"]["trip_nights"] = int(signals.get("trip_nights", 7))
+            if len(pages) == 0:
+                resp["flow_branch"] = "zero_offer"
+                resp["total_steps"] = 1
+                resp["entry_step_pill"] = "1 STEP"
+                resp["zero_offer_panel"] = synthesize_assistant_panel(
+                    screen_key="zero_offer",
+                    signals=signals,
+                    context=context,
+                    orchestrator=self.orchestrator,
+                    telemetry=self.telemetry,
+                )
+            else:
+                resp["flow_branch"] = "dynamic_offers"
+                resp["total_steps"] = len(pages)
+                resp["entry_step_pill"] = (
+                    "2 STEPS TO YOUR BOARDING PASSES"
+                    if len(pages) == 2
+                    else "1 STEP TO YOUR BOARDING PASSES"
+                )
+                resp.pop("zero_offer_panel", None)
+            validate_against_contract(resp, "checkin_flow.jsons")
+            return {
+                "flow_branch": resp["flow_branch"],
+                "total_steps": resp["total_steps"],
+                "entry_step_pill": resp["entry_step_pill"],
+            }
+
+        def _mutate_basket(product_id: str, quantity: int) -> dict[str, Any]:
+            selected = state["selected_quantities"]
+            if quantity <= 0:
+                selected.pop(product_id, None)
+            else:
+                selected[product_id] = quantity
+                self._counters["offers_accepted_by_id"][product_id] = (
+                    self._counters["offers_accepted_by_id"].get(product_id, 0) + 1
+                )
+            mutation = self._build_mutation_response(
+                state=state,
+                current_screen=state["response"].get("current_screen", "checkin_start"),
+                next_screen=state["response"].get("current_screen", "checkin_start"),
+            )
+            return mutation["basket"]
+
         return answer_trip_question(
             query=query,
             session_state=state,
-            context=state["context"],
-            orchestrator=self.orchestrator,
+            context=context,
             telemetry=self.telemetry,
+            signal_mutator=_mutate_signals,
+            basket_mutator=_mutate_basket,
         )
+
 
     def get_seat_map(self, session_id: str) -> dict[str, Any]:
         """Generate the Boeing 737 seat map for Screen F."""
