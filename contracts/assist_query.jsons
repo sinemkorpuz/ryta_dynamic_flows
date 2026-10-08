@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Copyright 2026 Google. Machine-readable contract for Screen E Help Hub ADK trip assistant queries, gemini-3.5-flash-lite safety guardrails, and gemini-3.8-flash tool execution.",
+  "title": "Help Hub Assist Query & Safeguard Schema",
+  "description": "Schema governing POST /api/v1/checkin/sessions/{session_id}/assist responses.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 280
+    },
+    "entry_point": {
+      "type": "string",
+      "enum": [
+        "searchbar",
+        "quick_chip"
+      ]
+    },
+    "rejection_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "surface_token": {
+      "type": "string",
+      "const": "surface/ai"
+    },
+    "heading": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "supporting_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "headline": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "subtext": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "adk_gemini_flash",
+        "adk_flash_lite_guardrail",
+        "deterministic_fallback"
+      ]
+    },
+    "guardrail_status": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FLAG",
+        "BLOCK"
+      ]
+    },
+    "guardrail_model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "security_events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "agent_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "invoked_tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "latency_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "state_mutated": {
+      "type": "boolean"
+    },
+    "signals": {
+      "type": "object",
+      "properties": {
+        "persona_id": {
+          "type": "string"
+        },
+        "prior_priority_trips": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "children_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "child_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "trip_nights": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "trip_length_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "force_zero_offer": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "persona_id",
+        "prior_priority_trips",
+        "children_count",
+        "child_count",
+        "trip_nights",
+        "trip_length_days",
+        "force_zero_offer"
+      ],
+      "additionalProperties": true
+    },
+    "suggested_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "action_type": {
+            "type": "string",
+            "enum": [
+              "navigate_screen",
+              "add_basket_item",
+              "confirm_seats",
+              "ask_query"
+            ]
+          },
+          "target_screen": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "product_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quantity": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "seat_designators": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "query": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "action_type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "basket": {
+      "type": "object"
+    },
+    "session": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "session_id",
+    "query",
+    "surface_token",
+    "heading",
+    "supporting_text",
+    "headline",
+    "subtext",
+    "source",
+    "guardrail_status",
+    "guardrail_model",
+    "security_events",
+    "agent_id",
+    "model",
+    "invoked_tools",
+    "latency_ms",
+    "state_mutated",
+    "signals",
+    "suggested_actions",
+    "basket",
+    "session"
+  ],
+  "additionalProperties": false
+}

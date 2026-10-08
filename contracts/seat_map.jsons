@@ -28,6 +28,30 @@
       "type": "string",
       "const": "Boeing 737-800"
     },
+    "aircraft": {
+      "type": "string",
+      "const": "Boeing 737-800"
+    },
+    "recommended_row": {
+      "type": "integer",
+      "const": 12
+    },
+    "recommended_seats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "unit_price_eur": {
+      "type": "number",
+      "const": 6.0
+    },
+    "total_price_eur": {
+      "type": "number",
+      "const": 24.0
+    },
     "recommended_block": {
       "$ref": "#/$defs/RecommendedSeatBlock"
     },
@@ -157,6 +181,9 @@
         "seat_id": {
           "type": "string"
         },
+        "designator": {
+          "type": "string"
+        },
         "column": {
           "type": "string",
           "enum": [
@@ -213,6 +240,12 @@
         },
         "child_restricted": {
           "type": "boolean"
+        },
+        "badge": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "restriction_reason": {
           "type": [

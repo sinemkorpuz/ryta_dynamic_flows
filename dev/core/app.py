@@ -5,13 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from dev.core.orchestrator import DEFAULT_FLASH_MODEL, DEFAULT_PRO_MODEL
+from dev.core.orchestrator import (
+    DEFAULT_FLASH_LITE_MODEL,
+    DEFAULT_FLASH_MODEL,
+    DEFAULT_PRO_MODEL,
+)
 from dev.skills.page_builder.skill import CheckinFlowService
 
 UI_DIR = Path(__file__).resolve().parents[1] / "ui"
@@ -52,6 +56,7 @@ class AssistQueryRequest(BaseModel):
     """Request body for Help Hub natural-language trip assistance."""
 
     query: str = Field(..., min_length=1, max_length=280)
+    entry_point: str = Field(default="searchbar", pattern="^(searchbar|quick_chip)$")
 
 
 def create_app(service: CheckinFlowService | None = None) -> FastAPI:
@@ -71,12 +76,24 @@ def create_app(service: CheckinFlowService | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def disable_static_cache(request: Request, call_next: Any) -> Response:
+        response: Response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/ui"):
+            response.headers["Cache-Control"] = (
+                "no-store, no-cache, must-revalidate, max-age=0"
+            )
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
     @app.get("/api/v1/health")
     def get_health() -> dict[str, Any]:
         return {
             "status": "ok",
             "schema_version": "1.0.0",
             "models": {
+                "flash_lite": DEFAULT_FLASH_LITE_MODEL,
                 "flash": DEFAULT_FLASH_MODEL,
                 "pro": DEFAULT_PRO_MODEL,
             },
@@ -106,7 +123,11 @@ def create_app(service: CheckinFlowService | None = None) -> FastAPI:
     @app.post("/api/v1/checkin/sessions/{session_id}/assist")
     def assist_session(session_id: str, req: AssistQueryRequest) -> dict[str, Any]:
         try:
-            return flow_service.assist_session(session_id=session_id, query=req.query)
+            return flow_service.assist_session(
+                session_id=session_id,
+                query=req.query,
+                entry_point=req.entry_point,
+            )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

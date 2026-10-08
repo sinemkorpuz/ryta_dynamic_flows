@@ -188,7 +188,7 @@ The prototype runs locally and in containerized staging environments as two deco
 | Runtime Unit | Technology Stack | Port / Endpoint | Scaling & Resource Profile |
 |---|---|---|---|
 | **Backend API & ADK Runtime** | Python 3.10+, FastAPI `0.141+`, Uvicorn, `google-adk 2.9+`, Pydantic `2.13+` | `http://0.0.0.0:8000` | Stateless worker processes; in-memory session store with JSON snapshot persistence in `results/`. |
-| **LLM Inference Upstream** | Google Gemini API (`gemini-3.8-flash` primary, `gemini-3.1-pro` fallback/eval) | HTTPS (`generativelanguage.googleapis.com`) | Governed by a 220ms per-request circuit breaker to guarantee the 300ms SLA. |
+| **LLM Inference Upstream** | Vertex AI Gemini (`gemini-3.5-flash-lite` safety/travel guardrail, `gemini-3.8-flash` primary ADK agent, `gemini-3.1-pro` eval) | Vertex AI (`GOOGLE_GENAI_USE_VERTEXAI=TRUE`) | Governed by a 220ms page-assembly circuit breaker and a 4.5s interactive Help Hub assist deadline. |
 | **Frontend Web/Mobile App** | Vite, TypeScript, HTML/CSS (390×844 mobile viewport frame + desktop analytics view) | `http://localhost:5173` (dev) or static mount on `:8000` | Client-side state hydrated from `/api/v1/checkin/*` and `/api/v1/analytics/*`. |
 | **Telemetry Sink** | OpenTelemetry OTLP Exporter + local JSONL audit log | `http://localhost:4317` & `results/telemetry_traces.jsonl` | Every request appends schema-validated events to `results/` for Gate 4 verification. |
 
@@ -218,10 +218,11 @@ Per the Multi-User Concurrency Protocol in [`AGENTS.md`](../../AGENTS.md), the `
 | Contract Schema File | Version | Producer | Consumer | Purpose |
 |---|---|---|---|---|
 | [`contracts/telemetry.jsons`](../../contracts/telemetry.jsons) | `1.0.0` (Frozen) | `adk`, `frontend` | Verify (`results/`) | Standardized OpenTelemetry & execution log schema for all agent, skill, and tool calls. |
-| `contracts/checkin_flow.jsons` | `1.0.0` (Gate 2) | `adk` | `frontend` | Request/response schema for session creation, passenger signal overrides, ranked ancillaries, dynamic offer pages, assistant copy panels, and step counts. |
-| `contracts/seat_map.jsons` | `1.0.0` (Gate 2) | `adk` | `frontend` | Boeing 737 cabin grid schema, recommended family block (`12A–12D`), child-restricted row metadata, and seat selection confirmation. |
-| `contracts/basket_checkout.jsons` | `1.0.0` (Gate 2) | `adk` | `frontend` | Session basket mutation (add, update quantity, decline, remove line item), payment confirmation (`Visa ending 4412`), and boarding pass issuance (`PRIORITY`, `12A` badges). |
-| `contracts/analytics_summary.jsons` | `1.0.0` (Gate 2) | `adk` | `frontend` | Aggregated KPI metrics for Screen 10: ancillary conversion rate, pages per check-in, median time to boarding pass, offers shown per passenger, and take-up breakdown. |
+| [`contracts/checkin_flow.jsons`](../../contracts/checkin_flow.jsons) | `1.0.0` (Frozen) | `adk` | `frontend` | Request/response schema for session creation, passenger signal overrides, ranked ancillaries, dynamic offer pages, assistant copy panels, and step counts. |
+| [`contracts/seat_map.jsons`](../../contracts/seat_map.jsons) | `1.0.0` (Frozen) | `adk` | `frontend` | Boeing 737 cabin grid schema, recommended family block (`12A–12D`), child-restricted row metadata, and seat selection confirmation. |
+| [`contracts/basket_checkout.jsons`](../../contracts/basket_checkout.jsons) | `1.0.0` (Frozen) | `adk` | `frontend` | Session basket mutation (add, update quantity, decline, remove line item), payment confirmation (`Visa ending 4412`), and boarding pass issuance (`PRIORITY`, `12A` badges). |
+| [`contracts/assist_query.jsons`](../../contracts/assist_query.jsons) | `1.0.0` (Frozen) | `adk` | `frontend` | Screen E Help Hub searchbar query/response contract, `gemini-3.5-flash-lite` guardrail status, `gemini-3.8-flash` invoked tool trace, and live state mutation payloads. |
+| [`contracts/analytics_summary.jsons`](../../contracts/analytics_summary.jsons) | `1.0.0` (Frozen) | `adk` | `frontend` | Aggregated KPI metrics for Screen 10: ancillary conversion rate, pages per check-in, median time to boarding pass, offers shown per passenger, and take-up breakdown. |
 
 ---
 

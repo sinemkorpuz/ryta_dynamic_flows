@@ -60,6 +60,7 @@ def build_seat_map(
             seats.append(
                 {
                     "seat_id": seat_id,
+                    "designator": seat_id,
                     "column": col,
                     "status": status,
                     "price_eur": 6.00,
@@ -67,11 +68,18 @@ def build_seat_map(
                 }
             )
 
+        row_badge: str | None = None
+        if row_num == 12:
+            row_badge = "Best row for your group"
+        elif is_exit:
+            row_badge = "UNAVAILABLE WITH CHILDREN" if child_restricted else "EXTRA LEGROOM"
+
         rows.append(
             {
                 "row_number": row_num,
                 "is_exit_row": is_exit,
                 "child_restricted": child_restricted,
+                "badge": row_badge,
                 "restriction_reason": row_reason,
                 "seats": seats,
             }
@@ -84,6 +92,11 @@ def build_seat_map(
         "header_title": "Choose your seats",
         "step_indicator": None,
         "aircraft_type": "Boeing 737-800",
+        "aircraft": "Boeing 737-800",
+        "recommended_row": 12,
+        "recommended_seats": list(RECOMMENDED_SEATS),
+        "unit_price_eur": 6.00,
+        "total_price_eur": 24.00,
         "recommended_block": {
             "row_number": 12,
             "seat_Designators": list(RECOMMENDED_SEATS),

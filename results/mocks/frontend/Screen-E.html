@@ -247,35 +247,57 @@
 <script>
   (function() {
     let liveSessionId = null;
+    let inFlight = false;
     const form = document.getElementById('stitch-help-form');
     const input = document.getElementById('stitch-help-input');
     const responseBox = document.getElementById('stitch-adk-response-container');
     const stepTitle = document.getElementById('stitch-step-title');
     const stepSubtitle = document.getElementById('stitch-step-subtitle');
 
+    function esc(raw) {
+      return String(raw == null ? '' : raw)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
     function renderResponse(data) {
       if (!responseBox) return;
-      const tools = Array.isArray(data.invoked_tools) && data.invoked_tools.length > 0
+      const isBlocked = data.guardrail_status === 'BLOCK';
+      const heading = data.heading || data.headline || 'Assistant response';
+      const subtext = data.supporting_text || data.subtext || '';
+      const tools = Array.isArray(data.invoked_tools)
         ? data.invoked_tools
         : ['get_trip_and_ancillary_scores'];
       const latency = Math.round(data.latency_ms || 39);
       const model = data.model || 'gemini-3.8-flash';
+      const gModel = data.guardrail_model || 'gemini-3.5-flash-lite';
+      const gStatus = data.guardrail_status || 'PASS';
+      const actions = Array.isArray(data.suggested_actions) ? data.suggested_actions : [];
       const toolBadges = tools.map(function(t) {
-        return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-surface-page text-tertiary-container border border-tertiary-fixed-dim font-mono">⚙ ' + t + '</span>';
+        return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-surface-page text-tertiary-container border border-tertiary-fixed-dim font-mono">⚙ ' + esc(t) + '</span>';
+      }).join('');
+      const actionChips = actions.map(function(a) {
+        return '<button type="button" data-action-query="' + esc(a.query || a.label) + '" class="stitch-action-btn px-2.5 py-1 rounded-full text-[10px] font-bold bg-white text-primary-container border border-tertiary-fixed-dim hover:bg-surface-container-low">' + esc(a.label) + '</button>';
       }).join('');
 
       responseBox.classList.remove('hidden');
       responseBox.innerHTML =
         '<div class="flex items-start justify-between gap-2">' +
           '<div class="flex items-center gap-1.5 text-tertiary-container font-title-md text-[14px] font-bold">' +
-            '<span>✦</span><span>' + data.headline + '</span>' +
+            '<span>' + (isBlocked ? '🛡️' : '✦') + '</span><span>' + esc(heading) + '</span>' +
           '</div>' +
           '<button type="button" id="stitch-adk-dismiss" class="text-tertiary-container font-bold text-sm px-1">×</button>' +
         '</div>' +
-        '<p class="font-body-sm text-body-sm text-text-body mt-1 leading-snug">' + data.subtext + '</p>' +
-        '<div class="flex flex-wrap gap-1.5 mt-2">' +
-          '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-pill-next-bg text-pill-next-text">ADK · ' + model + ' · ' + latency + 'ms</span>' +
-          toolBadges +
+        '<p class="font-body-sm text-body-sm text-text-body mt-1 leading-snug">' + esc(subtext) + '</p>' +
+        (actionChips ? '<div class="flex flex-wrap gap-1.5 mt-2">' + actionChips + '</div>' : '') +
+        '<div class="flex flex-wrap items-center justify-between gap-1.5 mt-2 pt-1.5 border-t border-tertiary-fixed-dim/40">' +
+          '<div class="flex flex-wrap gap-1">' +
+            '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-pill-next-bg text-pill-next-text">ADK · ' + esc(model) + ' · ' + latency + 'ms</span>' +
+            toolBadges +
+          '</div>' +
+          '<span class="text-[10px] font-bold text-pill-done-text">' + (isBlocked ? '🛡️ ' : '✓ ') + esc(gModel) + ' · ' + esc(gStatus) + '</span>' +
         '</div>';
 
       const dismissBtn = document.getElementById('stitch-adk-dismiss');
@@ -284,19 +306,28 @@
           responseBox.classList.add('hidden');
         });
       }
+      responseBox.querySelectorAll('.stitch-action-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          const q = this.getAttribute('data-action-query');
+          if (q) submitAssistQuery(q, 'quick_chip');
+        });
+      });
     }
 
-    async function submitAssistQuery(rawQuery) {
-      const q = (rawQuery || '').trim();
+    async function submitAssistQuery(rawQuery, entryPoint) {
+      if (inFlight) return;
+      const q = (rawQuery || '').trim().slice(0, 280);
       if (!q) return;
-      if (input) input.value = q;
+      const mode = entryPoint === 'quick_chip' ? 'quick_chip' : 'searchbar';
+      inFlight = true;
+      if (input && mode === 'searchbar') input.value = q;
 
       try {
         if (!liveSessionId) {
           const createRes = await fetch('http://localhost:8000/api/v1/checkin/sessions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ booking_ref: 'X8Y9QL', persona_preset: 'marta_byrne' })
+            body: JSON.stringify({ persona_id: 'marta_byrne' })
           });
           if (createRes.ok) {
             const created = await createRes.json();
@@ -307,7 +338,7 @@
           const assistRes = await fetch('http://localhost:8000/api/v1/checkin/sessions/' + liveSessionId + '/assist', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: q })
+            body: JSON.stringify({ query: q, entry_point: mode })
           });
           if (assistRes.ok) {
             const payload = await assistRes.json();
@@ -319,11 +350,14 @@
                 stepSubtitle.textContent = offerPages === 0 ? 'Zero-offer fast path active' : 'Confirm IDs & select seats next';
               }
             }
+            inFlight = false;
             return;
           }
         }
       } catch (_e) {
         // Fallback when running standalone without localhost:8000
+      } finally {
+        inFlight = false;
       }
 
       const lower = q.toLowerCase();
@@ -377,13 +411,13 @@
     if (form) {
       form.addEventListener('submit', function(ev) {
         ev.preventDefault();
-        if (input) submitAssistQuery(input.value);
+        if (input) submitAssistQuery(input.value, 'searchbar');
       });
     }
     document.querySelectorAll('.stitch-quick-chip').forEach(function(chip) {
       chip.addEventListener('click', function() {
         const q = this.getAttribute('data-query');
-        if (q) submitAssistQuery(q);
+        if (q) submitAssistQuery(q, 'quick_chip');
       });
     });
 

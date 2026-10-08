@@ -12,6 +12,7 @@ EXPECTED_CONTRACTS = (
     "seat_map.jsons",
     "basket_checkout.jsons",
     "analytics_summary.jsons",
+    "assist_query.jsons",
 )
 
 

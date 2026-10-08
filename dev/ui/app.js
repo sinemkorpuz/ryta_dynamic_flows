@@ -12,6 +12,7 @@
     sessionData: null,
     seatMapData: null,
     selectedSeats: ["12A", "12B", "12C", "12D"],
+    activeSeatPaxIdx: 0,
     helpHubResponse: null,
     helpHubLoading: false,
     basketData: {
@@ -59,7 +60,7 @@
     const toast = document.getElementById("mobile-toast");
     const text = document.getElementById("mobile-toast-text");
     if (!toast || !text) return;
-    text.textContent = message;
+    text.textContent = guardNoUndefined(String(message ?? ""));
     toast.classList.remove("hidden");
     clearTimeout(showToast._timer);
     showToast._timer = setTimeout(() => {
@@ -83,6 +84,7 @@
     state.personaId = personaId || state.personaId;
     state.drawerExpanded = false;
     state.activePassIndex = 0;
+    state.activeSeatPaxIdx = 0;
     state.helpHubResponse = null;
     state.seatMapData = null;
 
@@ -153,7 +155,134 @@
     return found ? found.quantity : 0;
   }
 
+  const SEAT_COLS = ["A", "B", "C", "D", "E", "F"];
+
+  function guardNoUndefined(html) {
+    if (typeof html !== "string") return "";
+    return html.replace(/undefined/gi, "");
+  }
+
+  function escapeHtml(raw) {
+    return String(raw ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function sanitizeSeatList(seats) {
+    const fallback = ["12A", "12B", "12C", "12D"];
+    if (!Array.isArray(seats)) return fallback.slice();
+    const valid = [];
+    for (const item of seats) {
+      const clean = String(item || "").trim().toUpperCase();
+      if (
+        clean &&
+        !clean.includes("UNDEFINED") &&
+        /^\d+[A-F]$/.test(clean) &&
+        !valid.includes(clean)
+      ) {
+        valid.push(clean);
+      }
+    }
+    if (valid.length === 0) return fallback.slice();
+    for (const fb of fallback) {
+      if (valid.length >= 4) break;
+      if (!valid.includes(fb)) valid.push(fb);
+    }
+    return valid.slice(0, 4);
+  }
+
+  function getRecommendedSeats(seatMap) {
+    if (!seatMap) return ["12A", "12B", "12C", "12D"];
+    if (
+      Array.isArray(seatMap.recommended_seats) &&
+      seatMap.recommended_seats.length > 0
+    ) {
+      return sanitizeSeatList(seatMap.recommended_seats);
+    }
+    if (
+      seatMap.recommended_block &&
+      Array.isArray(seatMap.recommended_block.seat_Designators) &&
+      seatMap.recommended_block.seat_Designators.length > 0
+    ) {
+      return sanitizeSeatList(seatMap.recommended_block.seat_Designators);
+    }
+    return ["12A", "12B", "12C", "12D"];
+  }
+
+  function getSeatId(seat, rowNumber, colIndex) {
+    const fallbackRow =
+      typeof rowNumber === "number" && rowNumber > 0 ? rowNumber : 12;
+    const fallbackCol =
+      SEAT_COLS[typeof colIndex === "number" ? colIndex : 0] || "A";
+    const fallbackId = `${fallbackRow}${fallbackCol}`;
+    if (!seat || typeof seat !== "object") {
+      return fallbackId;
+    }
+    const candidates = [seat.seat_id, seat.designator, seat.id, seat.code];
+    for (const c of candidates) {
+      if (typeof c === "string") {
+        const clean = c.trim().toUpperCase();
+        if (
+          clean &&
+          !clean.includes("UNDEFINED") &&
+          /^\d+[A-F]$/.test(clean)
+        ) {
+          return clean;
+        }
+      }
+    }
+    const col =
+      typeof seat.column === "string" &&
+      seat.column.trim() &&
+      !seat.column.toLowerCase().includes("undefined")
+        ? seat.column.trim().toUpperCase()
+        : fallbackCol;
+    const rNum =
+      typeof seat.row_number === "number" && seat.row_number > 0
+        ? seat.row_number
+        : fallbackRow;
+    return `${rNum}${col}`;
+  }
+
+  function buildFallbackSeatRows() {
+    const occupied = new Set(["11A", "11B", "12E", "12F", "13C", "15A", "15F"]);
+    const recommended = new Set(["12A", "12B", "12C", "12D"]);
+    const rowNums = [11, 12, 13, 15, 16, 17, 18];
+    return rowNums.map((rNum) => {
+      const isExit = rNum === 16 || rNum === 17;
+      return {
+        row_number: rNum,
+        is_exit_row: isExit,
+        child_restricted: isExit,
+        restriction_reason: isExit
+          ? "Unavailable for children under 16 (emergency exit row regulation)."
+          : null,
+        seats: SEAT_COLS.map((col) => {
+          const sid = `${rNum}${col}`;
+          let status = "available";
+          if (recommended.has(sid)) status = "recommended";
+          else if (isExit) status = "unavailable_child_rule";
+          else if (occupied.has(sid)) status = "occupied";
+          return {
+            seat_id: sid,
+            designator: sid,
+            column: col,
+            status,
+            price_eur: 6.0,
+            restriction_reason: isExit
+              ? "Unavailable for children under 16 (emergency exit row regulation)."
+              : null,
+          };
+        }),
+      };
+    });
+  }
+
   function formatChildAgeBadge(passenger) {
+    if (!passenger || typeof passenger.age !== "number") return "Child";
     if (passenger.age === 6) return "Child (6y)";
     if (passenger.age === 9) return "Child (9y)";
     return `Child (${passenger.age}y)`;
@@ -182,41 +311,42 @@
     const viewport = document.getElementById("screen-viewport");
     if (!viewport || !state.sessionData) return;
     viewport.scrollTop = 0;
+    state.selectedSeats = sanitizeSeatList(state.selectedSeats);
 
     switch (state.currentScreen) {
       case "checkin_start":
-        viewport.innerHTML = renderScreenE();
+        viewport.innerHTML = guardNoUndefined(renderScreenE());
         bindScreenE();
         break;
       case "loading":
-        viewport.innerHTML = renderScreenLoading();
+        viewport.innerHTML = guardNoUndefined(renderScreenLoading());
         break;
       case "offer_page_1":
-        viewport.innerHTML = renderOfferPage(0);
+        viewport.innerHTML = guardNoUndefined(renderOfferPage(0));
         bindOfferPage(0);
         break;
       case "seat_map":
-        viewport.innerHTML = renderScreenF();
+        viewport.innerHTML = guardNoUndefined(renderScreenF());
         bindScreenF();
         break;
       case "offer_page_2":
-        viewport.innerHTML = renderOfferPage(1);
+        viewport.innerHTML = guardNoUndefined(renderOfferPage(1));
         bindOfferPage(1);
         break;
       case "review_and_pay":
-        viewport.innerHTML = renderScreenD();
+        viewport.innerHTML = guardNoUndefined(renderScreenD());
         bindScreenD();
         break;
       case "zero_offer":
-        viewport.innerHTML = renderScreenC();
+        viewport.innerHTML = guardNoUndefined(renderScreenC());
         bindScreenC();
         break;
       case "boarding_passes":
-        viewport.innerHTML = renderScreenG();
+        viewport.innerHTML = guardNoUndefined(renderScreenG());
         bindScreenG();
         break;
       default:
-        viewport.innerHTML = renderScreenE();
+        viewport.innerHTML = guardNoUndefined(renderScreenE());
         bindScreenE();
     }
   }
@@ -267,18 +397,22 @@
             <div class="bg-surface-page rounded-full px-4 py-2.5 flex items-center justify-between shadow-sm mt-4 text-text-body">
               <div class="flex items-center gap-2.5 flex-1 min-w-0 mr-2">
                 <span class="material-symbols-outlined text-[20px] text-text-heading flex-shrink-0">search</span>
-                <input id="help-hub-input" type="text" value="${
-                  state.helpHubResponse ? state.helpHubResponse.query : ""
-                }" placeholder="Ask or search for help with this trip" class="w-full bg-transparent outline-none font-body-sm text-body-sm text-text-heading placeholder:text-text-body truncate" />
+                <input id="help-hub-input" type="text" maxlength="280" ${
+                  state.helpHubLoading ? "disabled" : ""
+                } value="${
+                  state.searchBarQuery ? escapeHtml(state.searchBarQuery) : ""
+                }" placeholder="Ask or search for help with this trip" class="w-full bg-transparent outline-none font-body-sm text-body-sm text-text-heading placeholder:text-text-body truncate disabled:opacity-60" />
               </div>
-              <button id="help-hub-submit" type="button" aria-label="Ask Assistant" class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-text-heading flex-shrink-0 transition-colors hover:bg-surface-variant">
+              <button id="help-hub-submit" type="button" ${
+                state.helpHubLoading ? "disabled" : ""
+              } aria-label="Ask Assistant" class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-text-heading flex-shrink-0 transition-colors hover:bg-surface-variant disabled:opacity-60">
                 <span class="material-symbols-outlined text-[18px]">${
                   state.helpHubLoading ? "hourglass_top" : "arrow_forward"
                 }</span>
               </button>
             </div>
 
-            <!-- Quick-Ask Grounded & ADK Simulation Chips -->
+            <!-- Quick-Ask Grounded & ADK Simulation Chips (Pre-vetted: bypass security guardrails) -->
             <div class="flex items-center gap-1.5 mt-2.5 overflow-x-auto no-scrollbar">
               <button type="button" data-quick-ask="Sitting with children?" class="quick-ask-chip px-2.5 py-1 rounded-full bg-on-primary/10 hover:bg-on-primary/20 text-[11px] font-medium text-on-primary whitespace-nowrap transition-colors">Sitting with children?</button>
               <button type="button" data-quick-ask="Cabin & 20kg bag rules?" class="quick-ask-chip px-2.5 py-1 rounded-full bg-on-primary/10 hover:bg-on-primary/20 text-[11px] font-medium text-on-primary whitespace-nowrap transition-colors">Cabin &amp; 20kg bags?</button>
@@ -292,44 +426,203 @@
         <!-- Content Body Container -->
         <div class="px-margin flex flex-col gap-space-lg -mt-3 relative z-20">
           ${
-            state.helpHubResponse
+            state.helpHubLoading
               ? `
-          <!-- Grounded ADK Help Hub Response Card (surface/ai #F2F1FE) -->
-          <div class="rounded-[18px] bg-surface-ai p-3.5 shadow-sm border border-[#4B2EDB]/15 flex flex-col gap-2">
+          <!-- Orchestrator Routing / ADK Pipeline Loading Shimmer Card -->
+          <div id="help-hub-shimmer-card" class="rounded-[18px] bg-surface-ai p-3.5 shadow-sm border border-[#4B2EDB]/20 flex flex-col gap-2 animate-pulse">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-full bg-[#4B2EDB] flex items-center justify-center text-on-primary shrink-0">
+                <span class="material-symbols-outlined text-[17px]">hourglass_top</span>
+              </div>
+              <div class="flex flex-col min-w-0 flex-1">
+                ${
+                  state.helpHubEntryPoint === "quick_chip"
+                    ? `
+                <span class="font-title-md text-title-md text-[#4B2EDB] font-bold">Running curated trip question…</span>
+                <span class="font-body-sm text-body-sm text-text-body">Direct route to ADK (<code>gemini-3.8-flash</code>) · No guardrail vetting needed</span>
+                `
+                    : `
+                <span class="font-title-md text-title-md text-[#4B2EDB] font-bold">Orchestrator checking searchbar query…</span>
+                <span class="font-body-sm text-body-sm text-text-body">1. Flash-Lite check (<code>gemini-3.5-flash-lite</code>) → 2. Route to <code>gemini-3.8-flash</code> or Reject</span>
+                `
+                }
+              </div>
+            </div>
+          </div>
+          `
+              : state.helpHubResponse
+              ? (() => {
+                  const hh = state.helpHubResponse;
+                  const isBlocked = hh.guardrail_status === "BLOCK";
+                  const isQuickChip = hh.entry_point === "quick_chip";
+                  const rejectionReason =
+                    hh.rejection_reason ||
+                    (Array.isArray(hh.security_events) &&
+                    hh.security_events.length > 0
+                      ? hh.security_events[0]
+                      : "out_of_scope_query");
+                  const actions = Array.isArray(hh.suggested_actions)
+                    ? hh.suggested_actions
+                    : [];
+                  const basketItems =
+                    (state.basketData && state.basketData.items) || [];
+                  const hasBasket = basketItems.length > 0;
+                  const basketTotal =
+                    (state.basketData && state.basketData.formatted_total) ||
+                    "€0.00";
+                  const isSimMutated =
+                    hh.state_mutated &&
+                    (hh.invoked_tools || []).includes(
+                      "update_simulation_signals"
+                    );
+                  return `
+          <!-- Grounded ADK Help Hub Response Card (${
+            isBlocked ? "Guardrail Rejection Feedback" : "surface/ai #F2F1FE"
+          }) -->
+          <div id="help-hub-response-card" class="rounded-[18px] ${
+            isBlocked
+              ? "bg-pill-review-bg/95 border border-pill-review-text/30"
+              : "bg-surface-ai border border-[#4B2EDB]/15"
+          } p-3.5 shadow-sm flex flex-col gap-2.5">
+            ${
+              isBlocked
+                ? `
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-pill-review-text/15 text-pill-review-text text-[10px] font-bold">
+                <span class="material-symbols-outlined text-[13px]">gpp_maybe</span>
+                <span>Orchestrator Rejected Searchbar Query (${escapeHtml(
+                  hh.guardrail_model || "gemini-3.5-flash-lite"
+                )})</span>
+              </span>
+              <span class="px-2 py-0.5 rounded-full bg-white/90 text-pill-review-text font-mono text-[10px] font-semibold border border-pill-review-text/20">
+                Reason: ${escapeHtml(rejectionReason)}
+              </span>
+            </div>
+            `
+                : ""
+            }
             <div class="flex items-start justify-between gap-2.5">
               <div class="flex items-start gap-2.5 min-w-0">
-                <div class="w-8 h-8 rounded-full bg-[#4B2EDB] flex items-center justify-center text-on-primary shrink-0 mt-0.5">
-                  <span class="material-symbols-outlined text-[17px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+                <div class="w-8 h-8 rounded-full ${
+                  isBlocked ? "bg-pill-review-text" : "bg-[#4B2EDB]"
+                } flex items-center justify-center text-on-primary shrink-0 mt-0.5">
+                  <span class="material-symbols-outlined text-[17px]" style="font-variation-settings: 'FILL' 1;">${
+                    isBlocked ? "shield" : "auto_awesome"
+                  }</span>
                 </div>
                 <div class="flex flex-col min-w-0">
-                  <span class="font-title-md text-title-md text-[#4B2EDB] font-bold">${state.helpHubResponse.heading}</span>
-                  <p class="font-body-sm text-body-sm text-text-body mt-0.5">${state.helpHubResponse.supporting_text}</p>
+                  <span class="font-title-md text-title-md ${
+                    isBlocked ? "text-pill-review-text" : "text-[#4B2EDB]"
+                  } font-bold">${escapeHtml(hh.heading)}</span>
+                  <p class="font-body-sm text-body-sm text-text-body mt-0.5">${escapeHtml(
+                    hh.supporting_text
+                  )}</p>
                 </div>
               </div>
               <button id="close-help-hub-card" type="button" aria-label="Dismiss" class="text-text-body hover:text-text-heading p-1">
                 <span class="material-symbols-outlined text-[16px]">close</span>
               </button>
             </div>
-            <div class="flex items-center justify-between flex-wrap gap-1.5 pt-1.5 border-t border-[#4B2EDB]/10 text-[10px]">
+
+            ${
+              isSimMutated
+                ? `
+            <div class="rounded-xl bg-white/90 border border-[#4B2EDB]/15 px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
+              <span class="font-bold text-[#4B2EDB] flex items-center gap-1">
+                <span class="material-symbols-outlined text-[15px]">tune</span>
+                <span>Funnel Re-scored: ${escapeHtml(stepPillText)}</span>
+              </span>
+              <span class="px-2 py-0.5 rounded-full bg-pill-done-bg text-pill-done-text font-bold">${
+                isZero ? "0 Offer Pages" : `${s.total_steps} Offer Pages`
+              }</span>
+            </div>
+            `
+                : ""
+            }
+
+            ${
+              hasBasket && !isBlocked
+                ? `
+            <div id="help-hub-basket-pill" class="rounded-xl bg-white border border-border-hairline px-3 py-2 flex items-center justify-between gap-2 text-xs">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="material-symbols-outlined text-[16px] text-pill-done-text">shopping_bag</span>
+                <span class="font-semibold text-text-heading truncate">Basket: ${
+                  basketItems.length
+                } extra${
+                    basketItems.length === 1 ? "" : "s"
+                  } · <strong class="text-primary-container">${escapeHtml(
+                    basketTotal
+                  )}</strong></span>
+              </div>
+              <button type="button" data-jump-inline="review_and_pay" class="text-[11px] font-bold text-primary-container hover:underline whitespace-nowrap">Review &amp; Pay →</button>
+            </div>
+            `
+                : ""
+            }
+
+            ${
+              actions.length > 0
+                ? `
+            <div class="flex items-center gap-1.5 flex-wrap pt-0.5">
+              ${actions
+                .map(
+                  (act, idx) => `
+                <button type="button" data-assist-action-idx="${idx}" class="assist-action-chip px-3 py-1.5 rounded-full text-[11px] font-bold transition-all shadow-2xs ${
+                    idx === 0 && !isBlocked
+                      ? "bg-[#4B2EDB] text-white hover:bg-[#3b21b8]"
+                      : "bg-white text-primary-container border border-border-hairline hover:bg-surface-container-low"
+                  }">
+                  ${escapeHtml(act.label)}
+                </button>
+              `
+                )
+                .join("")}
+            </div>
+            `
+                : ""
+            }
+
+            <div class="flex items-center justify-between flex-wrap gap-1.5 pt-1.5 border-t ${
+              isBlocked ? "border-pill-review-text/20" : "border-[#4B2EDB]/10"
+            } text-[10px]">
               <div class="flex items-center gap-1 flex-wrap">
-                <span class="px-2 py-0.5 rounded-full bg-[#4B2EDB]/10 text-[#4B2EDB] font-bold">ADK · ${
-                  typeof state.helpHubResponse.latency_ms === "number"
-                    ? `${state.helpHubResponse.latency_ms.toFixed(1)}ms`
-                    : "Live"
-                }</span>
-                ${(state.helpHubResponse.invoked_tools || [])
+                ${
+                  isBlocked
+                    ? `<span class="px-2 py-0.5 rounded-full bg-pill-review-text/15 text-pill-review-text font-bold">Not Routed to gemini-3.8-flash · ${
+                        typeof hh.latency_ms === "number"
+                          ? `${hh.latency_ms.toFixed(1)}ms`
+                          : "0.2ms"
+                      }</span>`
+                    : `<span class="px-2 py-0.5 rounded-full bg-[#4B2EDB]/10 text-[#4B2EDB] font-bold">ADK · ${escapeHtml(
+                        hh.model || "gemini-3.8-flash"
+                      )} · ${
+                        typeof hh.latency_ms === "number"
+                          ? `${hh.latency_ms.toFixed(1)}ms`
+                          : "Live"
+                      }</span>`
+                }
+                ${(hh.invoked_tools || [])
                   .map(
                     (t) =>
-                      `<span class="px-2 py-0.5 rounded-full bg-white text-primary-container font-mono font-semibold border border-border-hairline">${t}()</span>`
+                      `<span class="px-2 py-0.5 rounded-full bg-white text-primary-container font-mono font-semibold border border-border-hairline">${escapeHtml(
+                        t
+                      )}()</span>`
                   )
                   .join("")}
               </div>
-              <span class="text-pill-done-text font-bold">✓ Guardrail ${
-                state.helpHubResponse.guardrail_status || "PASS"
-              }</span>
+              <span class="${
+                isBlocked ? "text-pill-review-text" : "text-pill-done-text"
+              } font-bold">${
+                    isQuickChip
+                      ? "⚡ Quick-Ask · Guardrail Bypassed"
+                      : `${isBlocked ? "🛡️" : "✓"} ${escapeHtml(
+                          hh.guardrail_model || "gemini-3.5-flash-lite"
+                        )} · ${escapeHtml(hh.guardrail_status || "PASS")}`
+                  }</span>
             </div>
           </div>
-          `
+          `;
+                })()
               : ""
           }
 
@@ -380,7 +673,7 @@
                 <span class="font-label-sm text-label-sm text-text-body block mt-0.5">${booking.origin_terminal || "Terminal 1"} · Gate ${booking.gate || "104"}</span>
               </div>
               <div class="flex-1 px-3 flex flex-col items-center">
-                <span class="font-label-sm text-label-sm text-text-body mb-1">2h 55m · ${booking.trip_nights || 7} nights</span>
+                <span class="font-label-sm text-label-sm text-text-body mb-1">2h 55m · ${booking.trip_nights || 7} night${(booking.trip_nights || 7) === 1 ? "" : "s"}</span>
                 <div class="w-full flex items-center gap-1">
                   <div class="w-2 h-2 rounded-full bg-primary-container"></div>
                   <div class="flex-1 h-0.5 bg-outline-variant/60 relative">
@@ -399,8 +692,19 @@
 
           <!-- Passenger Roster Section (Grounded in sessionData.passengers with Child (6y) & Child (9y) badges) -->
           <div class="flex flex-col gap-space-sm">
-            <div class="flex items-center justify-between px-1">
-              <span class="font-label-sm text-label-sm text-primary font-bold tracking-wider uppercase">${passengers.length} Passengers</span>
+            <div class="flex items-center justify-between px-1 flex-wrap gap-1">
+              <div class="flex items-center gap-1.5">
+                <span class="font-label-sm text-label-sm text-primary font-bold tracking-wider uppercase">${passengers.length} Passengers</span>
+                ${
+                  state.helpHubResponse &&
+                  state.helpHubResponse.signals &&
+                  state.helpHubResponse.signals.children_count === 0
+                    ? `<span class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-fixed text-[10px] font-bold">⚡ Sim: 0 Children · ${escapeHtml(
+                        state.helpHubResponse.signals.trip_nights
+                      )}n</span>`
+                    : ""
+                }
+              </div>
               <span class="font-label-sm text-label-sm text-pill-done-text flex items-center gap-1 font-semibold">
                 <span class="material-symbols-outlined text-[15px]" style="font-variation-settings: 'FILL' 1;">verified</span>
                 Passports on file
@@ -494,8 +798,17 @@
     }
   }
 
-  async function submitHelpHubQuery(rawQuery) {
-    const q = (rawQuery || "").trim() || "Tell me about this flight and seating";
+  async function submitHelpHubQuery(rawQuery, entryPoint = "searchbar") {
+    if (state.helpHubLoading) return;
+    const normalizedEntryPoint =
+      entryPoint === "quick_chip" ? "quick_chip" : "searchbar";
+    const q =
+      (rawQuery || "").trim().slice(0, 280) ||
+      "Tell me about this flight and seating";
+    if (normalizedEntryPoint === "searchbar") {
+      state.searchBarQuery = q;
+    }
+    state.helpHubEntryPoint = normalizedEntryPoint;
     state.helpHubLoading = true;
     renderCurrentScreen();
     try {
@@ -503,7 +816,10 @@
         `/api/v1/checkin/sessions/${state.sessionId}/assist`,
         {
           method: "POST",
-          body: JSON.stringify({ query: q }),
+          body: JSON.stringify({
+            query: q,
+            entry_point: normalizedEntryPoint,
+          }),
         }
       );
       state.helpHubResponse = res;
@@ -521,7 +837,9 @@
         latencyBadge.textContent = `ADK Assist · ${res.latency_ms.toFixed(1)}ms`;
       }
       await refreshAnalytics();
-      if (res.state_mutated) {
+      if (res.guardrail_status === "BLOCK") {
+        showToast(`Orchestrator rejected routing: ${res.heading}`);
+      } else if (res.state_mutated) {
         showToast(`ADK updated simulation: ${res.heading}`);
       }
     } catch (err) {
@@ -553,14 +871,14 @@
     const helpBtn = document.getElementById("help-hub-submit");
     if (helpBtn) {
       helpBtn.addEventListener("click", () => {
-        submitHelpHubQuery(helpInput ? helpInput.value : "");
+        submitHelpHubQuery(helpInput ? helpInput.value : "", "searchbar");
       });
     }
     if (helpInput) {
       helpInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
-          submitHelpHubQuery(helpInput.value);
+          submitHelpHubQuery(helpInput.value, "searchbar");
         }
       });
     }
@@ -568,7 +886,7 @@
     document.querySelectorAll(".quick-ask-chip").forEach((chip) => {
       chip.addEventListener("click", () => {
         const q = chip.getAttribute("data-quick-ask");
-        submitHelpHubQuery(q);
+        submitHelpHubQuery(q, "quick_chip");
       });
     });
 
@@ -579,6 +897,92 @@
         renderCurrentScreen();
       });
     }
+
+    document.querySelectorAll("[data-jump-inline]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const target = btn.getAttribute("data-jump-inline");
+        if (target) {
+          state.currentScreen = target;
+          renderCurrentScreen();
+        }
+      });
+    });
+
+    document.querySelectorAll(".assist-action-chip").forEach((chip) => {
+      chip.addEventListener("click", async () => {
+        const idx = parseInt(
+          chip.getAttribute("data-assist-action-idx") || "-1",
+          10
+        );
+        const actions =
+          (state.helpHubResponse && state.helpHubResponse.suggested_actions) ||
+          [];
+        const act = actions[idx];
+        if (!act) return;
+
+        try {
+          if (act.action_type === "navigate_screen" && act.target_screen) {
+            if (act.target_screen === "seat_map") {
+              state.seatMapData = await apiFetch(
+                `/api/v1/checkin/sessions/${state.sessionId}/seat-map`
+              );
+              state.selectedSeats = getRecommendedSeats(state.seatMapData);
+            }
+            state.currentScreen = act.target_screen;
+            renderCurrentScreen();
+          } else if (act.action_type === "add_basket_item" && act.product_id) {
+            const mutation = await apiFetch(
+              `/api/v1/checkin/sessions/${state.sessionId}/actions`,
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  action: "add",
+                  current_screen: "offer_page_1",
+                  product_id: act.product_id,
+                  quantity: act.quantity || 1,
+                }),
+              }
+            );
+            syncMutationResponse(mutation);
+            if (state.helpHubResponse && mutation.basket) {
+              state.helpHubResponse.basket = mutation.basket;
+            }
+            await refreshAnalytics();
+            showToast(
+              `Added to basket · Total ${
+                (mutation.basket && mutation.basket.formatted_total) || ""
+              }`
+            );
+            renderCurrentScreen();
+          } else if (act.action_type === "confirm_seats") {
+            const seats = act.seat_designators || ["12A", "12B", "12C", "12D"];
+            const mutation = await apiFetch(
+              `/api/v1/checkin/sessions/${state.sessionId}/seats`,
+              {
+                method: "POST",
+                body: JSON.stringify({ seat_designators: seats }),
+              }
+            );
+            syncMutationResponse(mutation);
+            state.selectedSeats = seats;
+            if (state.helpHubResponse && mutation.basket) {
+              state.helpHubResponse.basket = mutation.basket;
+            }
+            await refreshAnalytics();
+            showToast(
+              `Confirmed seats ${seats.join(", ")} · Total ${
+                (mutation.basket && mutation.basket.formatted_total) || ""
+              }`
+            );
+            renderCurrentScreen();
+          } else if (act.action_type === "ask_query" && act.query) {
+            await submitHelpHubQuery(act.query, "quick_chip");
+          }
+        } catch (err) {
+          showToast(`Action error: ${err.message}`);
+        }
+      });
+    });
   }
 
   /* ==========================================================================
@@ -620,15 +1024,16 @@
         : "bg-pill-next-bg text-pill-next-text";
 
     if (card.control_type === "seat_map_trigger") {
+      const validSeats = sanitizeSeatList(state.selectedSeats);
       const seatSummary = selected
-        ? `${state.selectedSeats.join(", ")} reserved`
+        ? `${validSeats.join(", ")} reserved`
         : "Row 12 · Together";
       return `
         <div class="bg-surface-page rounded-xl p-space-md border border-border-hairline flex flex-col gap-space-sm shadow-sm">
           <div class="flex items-center justify-between gap-space-sm">
             <div class="flex items-center gap-space-sm">
               <span class="material-symbols-outlined text-primary text-[22px] flex-shrink-0">${iconName}</span>
-              <span class="font-title-md text-title-md text-text-heading">${card.title}</span>
+              <span class="font-title-md text-title-md text-text-heading">${card.title || "Sit together"}</span>
             </div>
             ${
               card.status_pill
@@ -636,10 +1041,10 @@
                 : ""
             }
           </div>
-          <p class="font-body-sm text-body-sm text-text-body">${card.description}</p>
+          <p class="font-body-sm text-body-sm text-text-body">${card.description || ""}</p>
           <div class="flex items-center justify-between pt-1 mt-1">
             <div class="flex flex-col">
-              <span class="text-[18px] font-bold text-text-heading">${card.price_label}</span>
+              <span class="text-[18px] font-bold text-text-heading">${card.price_label || "€24 for 4 seats"}</span>
               <span class="font-label-md text-label-md text-text-body">${seatSummary}</span>
             </div>
             <button type="button" data-seat-trigger="${pid}" class="${
@@ -647,7 +1052,7 @@
                 ? "px-5 py-2 rounded-full bg-pill-done-bg text-pill-done-text border-[1.5px] border-pill-done-text font-title-md text-body-md font-semibold transition-all"
                 : "px-5 py-2 rounded-full border-[1.5px] border-primary-container text-primary-container font-title-md text-body-md font-semibold hover:bg-primary-container/5 transition-all"
             }">
-              ${selected ? `Seats ${state.selectedSeats[0]}–${state.selectedSeats[state.selectedSeats.length - 1]} ✓` : card.cta_label}
+              ${selected ? `Seats ${validSeats[0]}–${validSeats[validSeats.length - 1]} ✓` : card.cta_label || "Choose seats"}
             </button>
           </div>
         </div>
@@ -663,12 +1068,12 @@
                 <span class="material-symbols-outlined text-primary text-[22px]">${iconName}</span>
               </div>
               <div class="flex flex-col">
-                <span class="font-title-md text-title-md text-text-heading">${card.title}</span>
-                <span class="font-body-sm text-body-sm text-text-body">${card.description}</span>
+                <span class="font-title-md text-title-md text-text-heading">${card.title || "Checked Bag"}</span>
+                <span class="font-body-sm text-body-sm text-text-body">${card.description || ""}</span>
               </div>
             </div>
             <div class="text-right shrink-0">
-              <span class="text-[18px] font-bold text-text-heading">${card.price_label}</span>
+              <span class="text-[18px] font-bold text-text-heading">${card.price_label || "€39.99"}</span>
               <span class="block font-label-sm text-label-sm text-text-body font-normal">for this flight</span>
             </div>
           </div>
@@ -690,7 +1095,7 @@
                 ? "px-5 py-2 rounded-full bg-pill-done-bg text-pill-done-text border-[1.5px] border-pill-done-text font-title-md text-body-md font-semibold transition-all"
                 : "px-5 py-2 rounded-full border-[1.5px] border-primary-container text-primary-container font-title-md text-body-md font-semibold hover:bg-primary-container/5 transition-all"
             }">
-              ${qty > 0 ? `Selected (${qty}) ✓` : card.cta_label}
+              ${qty > 0 ? `Selected (${qty}) ✓` : card.cta_label || "Add"}
             </button>
           </div>
         </div>
@@ -703,7 +1108,7 @@
         <div class="flex items-center justify-between gap-space-sm">
           <div class="flex items-center gap-space-sm">
             <span class="material-symbols-outlined text-primary text-[22px] flex-shrink-0">${iconName}</span>
-            <span class="font-title-md text-title-md text-text-heading">${card.title}</span>
+            <span class="font-title-md text-title-md text-text-heading">${card.title || "Extra"}</span>
           </div>
           ${
             card.status_pill
@@ -711,10 +1116,10 @@
               : ""
           }
         </div>
-        <p class="font-body-sm text-body-sm text-text-body">${card.description}</p>
+        <p class="font-body-sm text-body-sm text-text-body">${card.description || ""}</p>
         <div class="flex items-center justify-between pt-1 mt-1">
           <div class="flex flex-col">
-            <span class="text-[18px] font-bold text-text-heading">${card.price_label}</span>
+            <span class="text-[18px] font-bold text-text-heading">${card.price_label || ""}</span>
             ${
               card.secondary_link_label
                 ? `<button type="button" data-secondary-link="${pid}" class="text-left font-label-md text-label-md text-primary-container underline mt-0.5">${card.secondary_link_label}</button>`
@@ -726,7 +1131,7 @@
               ? "px-5 py-2 rounded-full bg-pill-done-bg text-pill-done-text border-[1.5px] border-pill-done-text font-title-md text-body-md font-semibold transition-all"
               : "px-5 py-2 rounded-full border-[1.5px] border-primary-container text-primary-container font-title-md text-body-md font-semibold hover:bg-primary-container/5 transition-all"
           }">
-            ${selected ? "✓ Added" : card.cta_label}
+            ${selected ? "✓ Added" : card.cta_label || "Add"}
           </button>
         </div>
       </div>
@@ -753,6 +1158,9 @@
         ? "Continue to Step 2"
         : "Confirm & Continue"
       : (page.decline_cta_label || "No thanks, continue").replace(" →", "");
+    const stepIndicator =
+      page.step_indicator || `Step ${pageIndex + 1} of ${pages.length || 1}`;
+    const assistantPanel = page.assistant_panel || {};
 
     return `
       <div class="flex flex-col w-full pb-8">
@@ -762,7 +1170,7 @@
             <span class="material-symbols-outlined text-[24px]">arrow_back</span>
           </button>
           <h1 class="font-title-md text-title-md font-bold text-on-primary text-center flex-1">${page.header_title || "Check in"}</h1>
-          <span class="font-label-md text-label-md text-on-primary/90 text-right min-w-[72px]">${page.step_indicator}</span>
+          <span class="font-label-md text-label-md text-on-primary/90 text-right min-w-[72px]">${stepIndicator}</span>
         </div>
 
         <div class="px-margin flex flex-col gap-space-lg pt-space-lg">
@@ -803,8 +1211,8 @@
                 <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
               </div>
               <div class="flex flex-col">
-                <h3 class="font-title-md text-title-md text-[#4B2EDB] font-bold">${page.assistant_panel.heading}</h3>
-                <p class="font-body-sm text-body-sm text-text-body mt-0.5">${page.assistant_panel.supporting_text}</p>
+                <h3 class="font-title-md text-title-md text-[#4B2EDB] font-bold">${assistantPanel.heading || "Tailored for your trip"}</h3>
+                <p class="font-body-sm text-body-sm text-text-body mt-0.5">${assistantPanel.supporting_text || ""}</p>
               </div>
             </div>
 
@@ -826,7 +1234,7 @@
                     page.drawer_label || `More extras (${drawerItems.length})`
                   }</span>
                   <span class="font-body-sm text-body-sm text-text-body">${drawerItems
-                    .map((d) => d.title)
+                    .map((d) => d.title || "Extra")
                     .join(" · ")}</span>
                 </div>
               </div>
@@ -843,9 +1251,9 @@
                       return `
             <div class="px-space-md pb-space-md pt-2 border-t border-border-hairline bg-surface-container-low/40 flex items-center justify-between gap-3">
               <div class="flex flex-col">
-                <span class="font-title-md text-text-heading">${d.title}</span>
-                <span class="font-body-sm text-text-body">${d.description}</span>
-                <span class="font-title-md text-text-heading font-bold mt-1">${d.price_label}</span>
+                <span class="font-title-md text-text-heading">${d.title || "Extra"}</span>
+                <span class="font-body-sm text-text-body">${d.description || ""}</span>
+                <span class="font-title-md text-text-heading font-bold mt-1">${d.price_label || ""}</span>
               </div>
               <button type="button" data-drawer-item="${d.product_id}" class="${
                         dSel
@@ -911,7 +1319,7 @@
     document.querySelectorAll("[data-secondary-link]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const paxNames = (s.passengers || [])
-          .map((p) => p.full_name)
+          .map((p) => p.full_name || p.display_name || "Guest")
           .join(", ");
         showToast(
           `Applies across all ${(s.passengers || []).length} passengers (${paxNames}) for this flight.`
@@ -924,13 +1332,12 @@
         state.seatMapData = await apiFetch(
           `/api/v1/checkin/sessions/${state.sessionId}/seat-map`
         );
-        if (
-          state.seatMapData &&
-          state.seatMapData.recommended_seats &&
-          state.seatMapData.recommended_seats.length > 0
-        ) {
-          state.selectedSeats = state.seatMapData.recommended_seats.slice();
+        if (!isProductSelected("reserved_seats")) {
+          state.selectedSeats = getRecommendedSeats(state.seatMapData);
+        } else {
+          state.selectedSeats = sanitizeSeatList(state.selectedSeats);
         }
+        state.activeSeatPaxIdx = 0;
         state.currentScreen = "seat_map";
         renderCurrentScreen();
       });
@@ -1049,47 +1456,67 @@
   }
 
   /* ==========================================================================
-   * SCREEN F — Seat Map (Grounded in state.seatMapData: rows, recommended_seats, child rules)
+   * SCREEN F — Seat Map (Grounded in state.seatMapData: rows, recommended_block, child rules)
    * ========================================================================== */
-  function renderSeatCell(seat, passengers) {
-    const selectedIdx = state.selectedSeats.indexOf(seat.designator);
+  function renderSeatCell(seat, passengers, rowNumber, colIndex, validSelected) {
+    const seatId = getSeatId(seat, rowNumber, colIndex);
+    const selectedList = Array.isArray(validSelected)
+      ? validSelected
+      : sanitizeSeatList(state.selectedSeats);
+    const selectedIdx = seatId ? selectedList.indexOf(seatId) : -1;
     const isSelected = selectedIdx !== -1;
 
     if (isSelected) {
       const pax = passengers[selectedIdx] || {};
-      const shortName = ((pax.full_name || pax.display_name || "Guest").split(" ")[0]);
+      const shortName = (
+        pax.full_name ||
+        pax.display_name ||
+        `Guest ${selectedIdx + 1}`
+      ).split(" ")[0];
+      const isActivePax = state.activeSeatPaxIdx === selectedIdx;
       return `
-        <button type="button" data-seat-select="${seat.designator}" class="h-11 rounded-lg bg-secondary-container text-on-secondary-fixed flex flex-col items-center justify-center shadow-sm transition-transform active:scale-95">
-          <span class="text-[12px] font-bold leading-tight">${seat.designator}</span>
-          <span class="text-[9px] uppercase font-bold truncate max-w-[44px]">${shortName}</span>
+        <button type="button" data-seat-select="${seatId}" class="h-11 w-full rounded-lg bg-secondary-container text-on-secondary-fixed flex flex-col items-center justify-center shadow-sm transition-transform active:scale-95 overflow-hidden px-0.5 ${
+          isActivePax ? "ring-2 ring-primary-container" : ""
+        }">
+          <span class="text-[11px] font-bold leading-tight">${seatId}</span>
+          <span class="text-[9px] uppercase font-bold truncate max-w-full leading-tight">${shortName}</span>
         </button>
       `;
     }
 
-    if (seat.status === "occupied") {
+    if (seat && seat.status === "occupied") {
       return `
-        <div class="h-9 rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant/40">
+        <div class="h-9 w-full rounded-lg bg-surface-variant flex items-center justify-center text-on-surface-variant/40" title="${seatId} Occupied">
           <span class="material-symbols-outlined text-[14px]">close</span>
         </div>
       `;
     }
 
-    if (seat.status === "blocked_child_rule") {
+    if (
+      seat &&
+      (seat.status === "unavailable_child_rule" ||
+        seat.status === "blocked_child_rule")
+    ) {
       return `
-        <button type="button" class="child-restricted-seat h-9 rounded-lg bg-surface-variant flex flex-col items-center justify-center text-on-surface-variant cursor-not-allowed" data-seat="${
-          seat.designator
-        }" data-reason="${seat.restriction_reason || "Exit row unavailable with children under 16"}">
-          <span class="font-label-sm leading-none">${seat.designator}</span>
-          <span class="text-[8px]">Restricted</span>
+        <button type="button" class="child-restricted-seat h-9 w-full rounded-lg bg-surface-variant flex flex-col items-center justify-center text-on-surface-variant cursor-not-allowed overflow-hidden px-0.5" data-seat="${seatId}" data-reason="${
+          seat.restriction_reason ||
+          "Exit row unavailable with children under 16"
+        }">
+          <span class="text-[10px] font-bold leading-none">${seatId}</span>
+          <span class="text-[8px] leading-tight truncate max-w-full">Restricted</span>
         </button>
       `;
     }
 
     // Available or unselected recommended seat
+    const priceVal =
+      seat && typeof seat.price_eur === "number"
+        ? Math.round(seat.price_eur)
+        : 6;
     return `
-      <button type="button" data-seat-select="${seat.designator}" class="h-9 rounded-lg bg-surface-container-low hover:bg-pill-next-bg flex flex-col items-center justify-center text-primary-container transition-colors">
-        <span class="font-label-sm leading-none font-bold">${seat.designator}</span>
-        <span class="text-[9px] text-text-body">€${Math.round(seat.price_eur || 6)}</span>
+      <button type="button" data-seat-select="${seatId}" class="h-9 w-full rounded-lg bg-surface-container-low hover:bg-pill-next-bg flex flex-col items-center justify-center text-primary-container transition-colors overflow-hidden px-0.5">
+        <span class="text-[11px] leading-none font-bold">${seatId}</span>
+        <span class="text-[9px] leading-tight text-text-body">€${priceVal}</span>
       </button>
     `;
   }
@@ -1098,23 +1525,43 @@
     const s = state.sessionData || {};
     const booking = s.booking || {};
     const passengers = s.passengers || [];
-    const seatMap = state.seatMapData || {
-      aircraft: "Boeing 737-800",
-      recommended_row: 12,
-      recommended_seats: ["12A", "12B", "12C", "12D"],
-      unit_price_eur: 6.0,
-      total_price_eur: 24.0,
-      assistant_panel: {
-        heading: "I've found 4 seats together",
-        supporting_text: "Row 12, near the front.",
-      },
-      rows: [],
+    const seatMap = state.seatMapData || {};
+    const recBlock = seatMap.recommended_block || {};
+    const recommendedRow =
+      typeof seatMap.recommended_row === "number"
+        ? seatMap.recommended_row
+        : typeof recBlock.row_number === "number"
+        ? recBlock.row_number
+        : 12;
+    const recommendedBadge =
+      recBlock.badge_label || "Best row for your group";
+    const unitPrice =
+      typeof seatMap.unit_price_eur === "number"
+        ? seatMap.unit_price_eur
+        : typeof recBlock.price_per_seat_eur === "number"
+        ? recBlock.price_per_seat_eur
+        : 6.0;
+    const validSelected = sanitizeSeatList(state.selectedSeats);
+    state.selectedSeats = validSelected;
+    const totalPrice = (validSelected.length * unitPrice).toFixed(2);
+    const activeRows =
+      Array.from(
+        new Set(
+          validSelected
+            .map((d) => String(d).replace(/[A-F]/gi, ""))
+            .filter(Boolean)
+        )
+      ).join(", ") || String(recommendedRow);
+    const aircraftLabel =
+      seatMap.aircraft_type || seatMap.aircraft || "Boeing 737-800";
+    const assistantPanel = seatMap.assistant_panel || {
+      heading: "I've found 4 seats together",
+      supporting_text: "Row 12, near the front.",
     };
-    const unitPrice = typeof seatMap.unit_price_eur === "number" ? seatMap.unit_price_eur : 6.0;
-    const totalPrice = (state.selectedSeats.length * unitPrice).toFixed(2);
-    const activeRows = Array.from(
-      new Set(state.selectedSeats.map((d) => d.replace(/[A-F]/g, "")))
-    ).join(", ");
+    const rows =
+      Array.isArray(seatMap.rows) && seatMap.rows.length > 0
+        ? seatMap.rows
+        : buildFallbackSeatRows();
 
     return `
       <div class="flex flex-col w-full pb-4">
@@ -1124,7 +1571,7 @@
             <button id="screen-f-back" type="button" aria-label="Back to Offer Page 1" class="w-9 h-9 -ml-1 flex items-center justify-start text-on-primary hover:opacity-80">
               <span class="material-symbols-outlined text-[24px]">arrow_back</span>
             </button>
-            <h1 class="font-title-md text-title-md font-bold text-on-primary flex-1 text-center">Choose your seats</h1>
+            <h1 class="font-title-md text-title-md font-bold text-on-primary flex-1 text-center">${seatMap.header_title || "Choose your seats"}</h1>
             <span class="w-9"></span>
           </div>
           <p class="font-body-sm text-body-sm text-primary-fixed text-center flex items-center justify-center gap-1.5 flex-wrap">
@@ -1132,7 +1579,7 @@
             <span>•</span>
             <span>Flight ${booking.flight_number || "FR1234"}</span>
             <span>•</span>
-            <span>${seatMap.aircraft || "Boeing 737-800"}</span>
+            <span>${aircraftLabel}</span>
           </p>
         </div>
 
@@ -1140,7 +1587,7 @@
           <!-- Passenger Selection Bar (Grounded in sessionData.passengers & state.selectedSeats) -->
           <div class="bg-surface-container-lowest rounded-xl p-3 shadow-sm border border-border-hairline flex flex-col gap-2.5">
             <div class="flex items-center justify-between">
-              <span class="font-label-sm text-label-sm text-text-body uppercase tracking-wider">Party of ${passengers.length} (PNR ${booking.booking_reference || "X8Y9QL"})</span>
+              <span class="font-label-sm text-label-sm text-text-body uppercase tracking-wider">Party of ${passengers.length || 4} (PNR ${booking.booking_reference || "X8Y9QL"})</span>
               <span class="font-label-sm text-label-sm text-pill-done-text bg-pill-done-bg px-2 py-0.5 rounded-full flex items-center gap-1">
                 <span class="material-symbols-outlined text-[13px]">check_circle</span>
                 All seated together
@@ -1149,20 +1596,31 @@
             <div class="grid grid-cols-2 gap-2">
               ${passengers
                 .map((p, idx) => {
-                  const firstName = (p.full_name || p.display_name || "Guest").split(" ")[0];
+                  const firstName = (
+                    p.full_name ||
+                    p.display_name ||
+                    `Guest ${idx + 1}`
+                  ).split(" ")[0];
                   const isChild = p.passenger_type === "child";
-                  const seatCode = state.selectedSeats[idx] || "—";
+                  const ageLabel =
+                    isChild && typeof p.age === "number" ? ` (${p.age}y)` : "";
+                  const seatCode = validSelected[idx] || "12A";
+                  const isActivePax = state.activeSeatPaxIdx === idx;
                   return `
-              <div class="flex items-center justify-between p-2 rounded-lg bg-secondary-container/20">
+              <button type="button" data-seat-pax="${idx}" class="flex items-center justify-between p-2 rounded-lg text-left transition-all ${
+                    isActivePax
+                      ? "bg-secondary-container/40 ring-2 ring-primary-container"
+                      : "bg-secondary-container/20 hover:bg-secondary-container/30"
+                  }">
                 <div class="flex items-center gap-2 min-w-0">
-                  <div class="w-6 h-6 rounded-full bg-secondary-container text-on-secondary-fixed flex items-center justify-center font-label-md shrink-0 font-bold">${firstName.charAt(0)}</div>
+                  <div class="w-6 h-6 rounded-full bg-secondary-container text-on-secondary-fixed flex items-center justify-center font-label-md shrink-0 font-bold">${firstName.charAt(0) || "G"}</div>
                   <div class="truncate">
-                    <p class="font-title-md text-text-heading truncate text-[13px] leading-tight">${firstName}${isChild ? ` (${p.age}y)` : ""}</p>
+                    <p class="font-title-md text-text-heading truncate text-[13px] leading-tight">${firstName}${ageLabel}</p>
                     <p class="font-body-sm text-text-body text-[11px] leading-tight">${isChild ? "Child" : "Adult"}</p>
                   </div>
                 </div>
                 <span class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-fixed text-[13px] font-bold">${seatCode}</span>
-              </div>
+              </button>
                   `;
                 })
                 .join("")}
@@ -1176,8 +1634,8 @@
                 <span class="material-symbols-outlined text-surface-page text-[18px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
               </div>
               <div class="flex-1">
-                <h2 class="font-title-md text-title-md text-[#4B2EDB] font-bold">${seatMap.assistant_panel.heading}</h2>
-                <p class="font-body-sm text-body-sm text-text-body mt-0.5">${seatMap.assistant_panel.supporting_text} Tap any available seat below to adjust.</p>
+                <h2 class="font-title-md text-title-md text-[#4B2EDB] font-bold">${assistantPanel.heading || "I've found 4 seats together"}</h2>
+                <p class="font-body-sm text-body-sm text-text-body mt-0.5">${assistantPanel.supporting_text || "Row 12, near the front."} Tap any available seat below to adjust.</p>
               </div>
             </div>
             <div class="flex items-center gap-2 pt-1 font-label-sm text-label-sm text-pill-done-text bg-surface-page/80 px-2.5 py-1.5 rounded-lg">
@@ -1188,24 +1646,26 @@
 
           <!-- Cabin Seat Map Card (Grounded in state.seatMapData.rows; Row 14 excluded) -->
           <div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm border border-border-hairline flex flex-col items-center">
-            <div class="w-full grid grid-cols-7 gap-1 text-center font-label-sm text-label-sm text-text-body py-1.5 mb-2 bg-surface-container-low rounded-lg">
-              <span>A</span><span>B</span><span>C</span><span class="text-on-surface-variant/50">AISLE</span><span>D</span><span>E</span><span>F</span>
+            <div class="w-full grid grid-cols-7 gap-1 text-center font-label-sm text-label-sm text-text-body py-1.5 mb-2 bg-surface-container-low rounded-lg items-center">
+              <span>A</span><span>B</span><span>C</span><span class="text-on-surface-variant/50 text-[9px] tracking-normal">AISLE</span><span>D</span><span>E</span><span>F</span>
             </div>
 
             <div class="w-full flex flex-col gap-2">
-              ${(seatMap.rows || [])
+              ${rows
                 .map((row) => {
                   const leftSeats = (row.seats || []).slice(0, 3);
                   const rightSeats = (row.seats || []).slice(3, 6);
-                  const isRecRow = row.row_number === seatMap.recommended_row;
+                  const isRecRow = row.row_number === recommendedRow;
+                  const rowBadge =
+                    row.badge || (isRecRow ? recommendedBadge : "");
                   return `
                     ${
-                      row.badge && !row.is_exit_row
+                      rowBadge && !row.is_exit_row
                         ? `
                     <div class="w-full flex justify-center -mb-0.5 mt-1">
                       <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-secondary-fixed shadow-sm">
                         <span class="material-symbols-outlined text-[14px]">stars</span>
-                        <span class="font-label-sm text-label-sm font-bold tracking-wide">${row.badge}</span>
+                        <span class="font-label-sm text-label-sm font-bold tracking-wide">${rowBadge}</span>
                       </div>
                     </div>
                     `
@@ -1217,7 +1677,7 @@
                     <div class="w-full flex items-center justify-between py-1 px-2.5 my-0.5 rounded bg-surface-container-high text-text-body">
                       <span class="font-label-sm text-label-sm font-bold flex items-center gap-1">
                         <span class="material-symbols-outlined text-[14px]">block</span>
-                        EXIT ROW ${row.row_number} · ${row.badge || "UNAVAILABLE WITH CHILDREN"}
+                        EXIT ROW ${row.row_number} · ${row.badge || (row.child_restricted ? "UNAVAILABLE WITH CHILDREN" : "EXTRA LEGROOM")}
                       </span>
                     </div>
                     `
@@ -1226,9 +1686,9 @@
                     <div class="grid grid-cols-7 gap-1.5 items-center ${
                       isRecRow ? "p-1 rounded-xl bg-secondary-container/20" : ""
                     } ${row.is_exit_row ? "opacity-55" : ""}">
-                      ${leftSeats.map((sItem) => renderSeatCell(sItem, passengers)).join("")}
+                      ${leftSeats.map((sItem, cIdx) => renderSeatCell(sItem, passengers, row.row_number, cIdx, validSelected)).join("")}
                       <div class="h-9 flex items-center justify-center font-label-md text-text-body font-bold">${row.row_number}</div>
-                      ${rightSeats.map((sItem) => renderSeatCell(sItem, passengers)).join("")}
+                      ${rightSeats.map((sItem, cIdx) => renderSeatCell(sItem, passengers, row.row_number, cIdx + 3, validSelected)).join("")}
                     </div>
                   `;
                 })
@@ -1239,14 +1699,14 @@
           <!-- Sticky Confirm Bar -->
           <div class="bg-surface-page rounded-2xl p-3.5 shadow-md border border-border-hairline flex items-center justify-between mt-1">
             <div class="flex flex-col">
-              <span class="font-label-sm text-label-sm text-text-body uppercase tracking-wider">${state.selectedSeats.length} seats · Row ${activeRows}</span>
+              <span class="font-label-sm text-label-sm text-text-body uppercase tracking-wider">${validSelected.length} seats · Row ${activeRows}</span>
               <div class="flex items-baseline gap-1">
                 <span class="font-headline-sm text-headline-sm text-text-heading leading-tight">€${totalPrice}</span>
                 <span class="font-body-sm text-body-sm text-text-body">(@ €${unitPrice.toFixed(2)})</span>
               </div>
             </div>
             <button id="confirm-seats-btn" type="button" class="bg-primary hover:bg-primary-container text-on-primary px-6 py-3 rounded-full font-title-md text-title-md flex items-center gap-2 shadow-md transition-all active:scale-[0.98]">
-              <span>Confirm seats</span>
+              <span>${(seatMap.sticky_footer && seatMap.sticky_footer.confirm_cta_label) || "Confirm seats"}</span>
               <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
             </button>
           </div>
@@ -1264,6 +1724,16 @@
       });
     }
 
+    document.querySelectorAll("[data-seat-pax]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-seat-pax") || "0", 10);
+        if (!Number.isNaN(idx) && idx >= 0 && idx < 4) {
+          state.activeSeatPaxIdx = idx;
+          renderCurrentScreen();
+        }
+      });
+    });
+
     document.querySelectorAll(".child-restricted-seat").forEach((btn) => {
       btn.addEventListener("click", () => {
         const reason = btn.getAttribute("data-reason");
@@ -1275,20 +1745,44 @@
 
     document.querySelectorAll("[data-seat-select]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const designator = btn.getAttribute("data-seat-select");
-        if (!designator) return;
-        const existingIdx = state.selectedSeats.indexOf(designator);
-        if (existingIdx !== -1) {
-          showToast(
-            `Seat ${designator} is currently assigned to passenger #${existingIdx + 1}. Tap any open seat to move.`
-          );
+        const designator = (btn.getAttribute("data-seat-select") || "")
+          .trim()
+          .toUpperCase();
+        if (
+          !designator ||
+          designator.includes("UNDEFINED") ||
+          !/^\d+[A-F]$/.test(designator)
+        ) {
           return;
         }
-        // Rotate replacement into the last passenger slot
-        const updated = state.selectedSeats.slice();
-        updated[updated.length - 1] = designator;
-        updated.sort();
-        state.selectedSeats = updated;
+        const passengers =
+          (state.sessionData && state.sessionData.passengers) || [];
+        const currentSeats = sanitizeSeatList(state.selectedSeats);
+        const existingIdx = currentSeats.indexOf(designator);
+        if (existingIdx !== -1) {
+          state.activeSeatPaxIdx = existingIdx;
+          const pax = passengers[existingIdx] || {};
+          const paxName = (
+            pax.full_name ||
+            pax.display_name ||
+            `Guest ${existingIdx + 1}`
+          ).split(" ")[0];
+          showToast(
+            `Seat ${designator} (${paxName}) selected. Tap any open seat to move ${paxName}.`
+          );
+          renderCurrentScreen();
+          return;
+        }
+        const targetIdx =
+          typeof state.activeSeatPaxIdx === "number" &&
+          state.activeSeatPaxIdx >= 0 &&
+          state.activeSeatPaxIdx < currentSeats.length
+            ? state.activeSeatPaxIdx
+            : 0;
+        const updated = currentSeats.slice();
+        updated[targetIdx] = designator;
+        state.selectedSeats = sanitizeSeatList(updated);
+        state.activeSeatPaxIdx = (targetIdx + 1) % state.selectedSeats.length;
         renderCurrentScreen();
       });
     });
@@ -1302,7 +1796,7 @@
           {
             method: "POST",
             body: JSON.stringify({
-              seat_designators: state.selectedSeats,
+              seat_designators: sanitizeSeatList(state.selectedSeats),
             }),
           }
         );
@@ -1860,35 +2354,66 @@
         const toolsHtml = (hh.invoked_tools || [])
           .map(
             (t) =>
-              `<span class="px-2 py-0.5 rounded-full bg-white text-primary-container font-mono font-semibold border border-border-hairline">${t}()</span>`
+              `<span class="px-2 py-0.5 rounded-full bg-white text-primary-container font-mono font-semibold border border-border-hairline">${escapeHtml(
+                t
+              )}()</span>`
           )
           .join("");
-        traceBar.innerHTML = `
+        const sourceBadge =
+          hh.guardrail_status === "BLOCK"
+            ? "🛡️ Guardrail Blocked"
+            : hh.source === "adk_gemini_flash"
+            ? "⚡ Live Vertex AI ADK"
+            : "✓ Grounded ADK Tools";
+        traceBar.innerHTML = guardNoUndefined(`
           <div class="flex items-center justify-between gap-2 flex-wrap">
             <span class="inline-flex items-center gap-1.5 font-bold text-[#4B2EDB]">
               <span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
-              <span>ADK Agent (<code>${hh.agent_id || "help_hub_trip_assistant"}</code> · <code>${hh.model || "gemini-flash"}</code>)</span>
+              <span>ADK Agent (<code>${escapeHtml(
+                hh.agent_id || "help_hub_trip_assistant"
+              )}</code> · Guardrail: <code>${escapeHtml(
+          hh.guardrail_model || "gemini-3.5-flash-lite"
+        )}</code> [${escapeHtml(
+          hh.guardrail_status || "PASS"
+        )}] · Agent: <code>${escapeHtml(
+          hh.model || "gemini-3.8-flash"
+        )}</code>)</span>
             </span>
-            <span class="px-2 py-0.5 rounded-full bg-pill-done-bg text-pill-done-text font-bold text-[11px]">
-              ${hh.source === "adk_gemini_flash" ? "⚡ Live ADK Runner" : "✓ Grounded ADK Tools"} · ${
+            <span class="px-2 py-0.5 rounded-full ${
+              hh.guardrail_status === "BLOCK"
+                ? "bg-pill-review-bg text-pill-review-text"
+                : "bg-pill-done-bg text-pill-done-text"
+            } font-bold text-[11px]">
+              ${sourceBadge} · ${
           typeof hh.latency_ms === "number" ? `${hh.latency_ms.toFixed(1)}ms` : "OK"
         }
             </span>
           </div>
           <div class="text-text-heading font-medium">
-            <span class="text-text-body">Screen E Query:</span> "${hh.query}" → <strong class="text-[#4B2EDB]">${hh.heading}</strong>
+            <span class="text-text-body">Screen E Query:</span> "${escapeHtml(
+              hh.query || ""
+            )}" → <strong class="text-[#4B2EDB]">${escapeHtml(
+          hh.heading || hh.headline || "Assistant response"
+        )}</strong>
           </div>
           <div class="flex items-center gap-1.5 flex-wrap pt-0.5">
             <span class="text-[11px] text-text-body font-semibold">Invoked Tools:</span>
-            ${toolsHtml || `<span class="text-[11px] text-text-body">score_ancillaries()</span>`}
+            ${
+              toolsHtml ||
+              `<span class="text-[11px] text-text-body">${
+                hh.guardrail_status === "BLOCK"
+                  ? "None (short-circuited by Stage 1 guardrail)"
+                  : "score_ancillaries()"
+              }</span>`
+            }
           </div>
-        `;
+        `);
       } else {
         traceBar.innerHTML = `
           <div class="flex items-center justify-between gap-2 flex-wrap">
             <span class="inline-flex items-center gap-1.5 font-bold text-[#4B2EDB]">
               <span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
-              <span>ADK Help Hub Agent (<code>help_hub_trip_assistant</code>)</span>
+              <span>ADK Help Hub Agent (<code>help_hub_trip_assistant</code> · <code>gemini-3.5-flash-lite</code> → <code>gemini-3.8-flash</code>)</span>
             </span>
             <span class="text-[11px] font-semibold text-text-body">Submit a question on Screen E to run ADK tools live</span>
           </div>
@@ -1901,69 +2426,81 @@
     const countersEl = document.getElementById("live-counters-strip");
     if (countersEl && a.live_session_counters) {
       const c = a.live_session_counters;
-      countersEl.innerHTML = `
-        <span class="px-2.5 py-1 rounded-full bg-surface-container-low font-semibold text-text-heading">Sessions: ${c.total_sessions_created}</span>
-        <span class="px-2.5 py-1 rounded-full bg-pill-done-bg text-pill-done-text font-bold">Live Revenue: €${c.total_ancillary_revenue_eur.toFixed(2)}</span>
-      `;
+      const rev =
+        typeof c.total_ancillary_revenue_eur === "number"
+          ? c.total_ancillary_revenue_eur.toFixed(2)
+          : "0.00";
+      countersEl.innerHTML = guardNoUndefined(`
+        <span class="px-2.5 py-1 rounded-full bg-surface-container-low font-semibold text-text-heading">Sessions: ${c.total_sessions_created ?? 0}</span>
+        <span class="px-2.5 py-1 rounded-full bg-pill-done-bg text-pill-done-text font-bold">Live Revenue: €${rev}</span>
+      `);
     }
 
     const kpiGrid = document.getElementById("kpi-tiles-grid");
     if (kpiGrid && a.kpi_tiles) {
-      kpiGrid.innerHTML = a.kpi_tiles
-        .map(
-          (tile) => `
+      kpiGrid.innerHTML = guardNoUndefined(
+        a.kpi_tiles
+          .map(
+            (tile) => `
           <div class="rounded-xl p-3.5 bg-surface-container-low/70 border border-border-hairline flex flex-col justify-between">
-            <span class="text-[11px] font-semibold text-text-body">${tile.label}</span>
-            <div class="text-2xl font-bold text-text-heading mt-1">${tile.value}</div>
-            <span class="text-[11px] font-bold text-pill-done-text mt-1">${tile.delta_label}</span>
+            <span class="text-[11px] font-semibold text-text-body">${tile.label || ""}</span>
+            <div class="text-2xl font-bold text-text-heading mt-1">${tile.value || ""}</div>
+            <span class="text-[11px] font-bold text-pill-done-text mt-1">${tile.delta_label || ""}</span>
           </div>
         `
-        )
-        .join("");
+          )
+          .join("")
+      );
     }
 
     const tableBody = document.getElementById("propensity-table-body");
     if (tableBody && s && s.ranked_ancillaries) {
-      tableBody.innerHTML = s.ranked_ancillaries
-        .map((item) => {
-          let badgeHtml = "";
-          if (item.placement === "primary_card") {
-            badgeHtml = `<span class="px-2 py-0.5 rounded-full bg-pill-done-bg text-pill-done-text font-bold">Promoted · Primary Card</span>`;
-          } else if (item.placement === "drawer") {
-            badgeHtml = `<span class="px-2 py-0.5 rounded-full bg-pill-review-bg text-pill-review-text font-bold">Demoted · "More extras" Drawer</span>`;
-          } else {
-            badgeHtml = `<span class="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-semibold">Removed (${item.removal_rule})</span>`;
-          }
-          return `
+      tableBody.innerHTML = guardNoUndefined(
+        s.ranked_ancillaries
+          .map((item) => {
+            let badgeHtml = "";
+            if (item.placement === "primary_card") {
+              badgeHtml = `<span class="px-2 py-0.5 rounded-full bg-pill-done-bg text-pill-done-text font-bold">Promoted · Primary Card</span>`;
+            } else if (item.placement === "drawer") {
+              badgeHtml = `<span class="px-2 py-0.5 rounded-full bg-pill-review-bg text-pill-review-text font-bold">Demoted · "More extras" Drawer</span>`;
+            } else {
+              badgeHtml = `<span class="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-semibold">Removed (${item.removal_rule || "ineligible"})</span>`;
+            }
+            const scoreStr =
+              typeof item.score === "number" ? item.score.toFixed(2) : "0.00";
+            return `
             <tr class="${item.eligible ? "bg-white" : "bg-surface-container-low/40 text-text-body/70"}">
-              <td class="py-2 px-3 font-bold text-text-heading">#${item.rank}</td>
-              <td class="py-2 px-3 font-semibold text-text-heading">${item.title}</td>
-              <td class="py-2 px-3 font-mono font-bold text-primary-container">${item.score.toFixed(2)}</td>
-              <td class="py-2 px-3">${item.top_driver}</td>
+              <td class="py-2 px-3 font-bold text-text-heading">#${item.rank ?? ""}</td>
+              <td class="py-2 px-3 font-semibold text-text-heading">${item.title || ""}</td>
+              <td class="py-2 px-3 font-mono font-bold text-primary-container">${scoreStr}</td>
+              <td class="py-2 px-3">${item.top_driver || "—"}</td>
               <td class="py-2 px-3">${badgeHtml}</td>
             </tr>
           `;
-        })
-        .join("");
+          })
+          .join("")
+      );
     }
 
     const takeupEl = document.getElementById("takeup-bars");
     if (takeupEl && a.takeup_by_ancillary) {
-      takeupEl.innerHTML = a.takeup_by_ancillary
-        .map(
-          (row) => `
+      takeupEl.innerHTML = guardNoUndefined(
+        a.takeup_by_ancillary
+          .map(
+            (row) => `
           <div class="p-3 rounded-xl bg-surface-container-low/50 border border-border-hairline flex flex-col gap-1.5 text-xs">
             <div class="flex justify-between font-semibold text-text-heading">
-              <span>${row.title}</span>
-              <span class="text-primary-container font-bold">${row.dynamic_conversion_pct}% vs ${row.static_baseline_pct}% static</span>
+              <span>${row.title || ""}</span>
+              <span class="text-primary-container font-bold">${row.dynamic_conversion_pct ?? 0}% vs ${row.static_baseline_pct ?? 0}% static</span>
             </div>
             <div class="w-full h-2 rounded-full bg-surface-container-high overflow-hidden">
-              <div class="h-full bg-primary-container rounded-full" style="width: ${Math.min(100, row.dynamic_conversion_pct * 1.8)}%"></div>
+              <div class="h-full bg-primary-container rounded-full" style="width: ${Math.min(100, (row.dynamic_conversion_pct || 0) * 1.8)}%"></div>
             </div>
           </div>
         `
-        )
-        .join("");
+          )
+          .join("")
+      );
     }
   }
 
@@ -1987,13 +2524,7 @@
           state.seatMapData = await apiFetch(
             `/api/v1/checkin/sessions/${state.sessionId}/seat-map`
           );
-          if (
-            state.seatMapData &&
-            state.seatMapData.recommended_seats &&
-            state.seatMapData.recommended_seats.length > 0
-          ) {
-            state.selectedSeats = state.seatMapData.recommended_seats.slice();
-          }
+          state.selectedSeats = getRecommendedSeats(state.seatMapData);
         }
         state.currentScreen = target;
         renderCurrentScreen();

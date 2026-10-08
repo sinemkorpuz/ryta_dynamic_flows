@@ -38,3 +38,16 @@ def test_seat_map_enforces_row_12_child_rules_and_no_row_14(tmp_path: Path) -> N
         assert row["child_restricted"] is True
         assert row["restriction_reason"] is not None
         assert all(seat["status"] == "unavailable_child_rule" for seat in row["seats"])
+
+    # Verify backward-compatible top-level fields and dual seat_id/designator on every seat
+    assert seat_map["recommended_row"] == 12
+    assert seat_map["recommended_seats"] == ["12A", "12B", "12C", "12D"]
+    assert seat_map["unit_price_eur"] == 6.00
+    assert seat_map["total_price_eur"] == 24.00
+    for row in seat_map["rows"]:
+        for seat in row["seats"]:
+            assert seat["seat_id"] == f"{row['row_number']}{seat['column']}"
+            assert seat["designator"] == seat["seat_id"]
+            assert "undefined" not in seat["seat_id"].lower()
+            assert "undefined" not in seat["designator"].lower()
+

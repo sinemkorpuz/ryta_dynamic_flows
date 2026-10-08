@@ -29,6 +29,8 @@ const helpResponse = ref<{
   tools: string[]
   latencyMs: number
   model: string
+  guardrailModel?: string
+  guardrailStatus?: string
   stateMutated?: boolean
 } | null>(null)
 
@@ -93,9 +95,13 @@ function selectPersona(p: 'marta_byrne' | 'zero_offer') {
 }
 
 async function submitHelpQuery(presetQuery?: string) {
-  const q = (typeof presetQuery === 'string' ? presetQuery : helpQuery.value).trim()
+  if (helpLoading.value) return
+  const isQuickChip = typeof presetQuery === 'string'
+  const q = (isQuickChip ? presetQuery : helpQuery.value).trim().slice(0, 280)
   if (!q) return
-  helpQuery.value = q
+  if (!isQuickChip) {
+    helpQuery.value = q
+  }
   helpLoading.value = true
 
   try {
@@ -103,7 +109,7 @@ async function submitHelpQuery(presetQuery?: string) {
       const createRes = await fetch('http://localhost:8000/api/v1/checkin/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ booking_ref: 'X8Y9QL', persona_preset: persona.value })
+        body: JSON.stringify({ persona_id: persona.value })
       })
       if (createRes.ok) {
         const sessionPayload = await createRes.json()
@@ -117,17 +123,22 @@ async function submitHelpQuery(presetQuery?: string) {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: q })
+          body: JSON.stringify({
+            query: q,
+            entry_point: isQuickChip ? 'quick_chip' : 'searchbar'
+          })
         }
       )
       if (assistRes.ok) {
         const data = await assistRes.json()
         helpResponse.value = {
-          headline: data.headline,
-          subtext: data.subtext,
-          tools: data.invoked_tools || ['get_trip_and_ancillary_scores'],
+          headline: data.heading || data.headline || 'Flight FR1234 (DUB → FAO) is ready',
+          subtext: data.supporting_text || data.subtext || '',
+          tools: data.invoked_tools || [],
           latencyMs: Math.round(data.latency_ms || 42),
           model: data.model || 'gemini-3.8-flash',
+          guardrailModel: data.guardrail_model || 'gemini-3.5-flash-lite',
+          guardrailStatus: data.guardrail_status || 'PASS',
           stateMutated: Boolean(data.state_mutated)
         }
         if (data.state_mutated) {
@@ -139,11 +150,11 @@ async function submitHelpQuery(presetQuery?: string) {
           }
           if (data.basket && Array.isArray(data.basket.items)) {
             const items = data.basket.items
-            priorityAdded.value = items.some((i: any) => i.product_code === 'priority_boarding')
-            seatsConfirmed.value = items.some((i: any) => i.product_code === 'reserved_seating')
-            const bagItem = items.find((i: any) => i.product_code === 'checked_bag_20kg')
+            priorityAdded.value = items.some((i: any) => i.product_id === 'priority_boarding' || i.product_code === 'priority_boarding')
+            seatsConfirmed.value = items.some((i: any) => i.product_id === 'reserved_seats' || i.product_code === 'reserved_seating')
+            const bagItem = items.find((i: any) => i.product_id === 'checked_bag_20kg' || i.product_code === 'checked_bag_20kg')
             bagCount.value = bagItem ? bagItem.quantity : 0
-            carAdded.value = items.some((i: any) => i.product_code === 'car_hire')
+            carAdded.value = items.some((i: any) => i.product_id === 'car_hire' || i.product_code === 'car_hire')
           }
         }
         helpLoading.value = false
@@ -314,7 +325,7 @@ function continueFromPage2() {
 
     <!-- Mode 1: Live FastAPI :8000 Iframe -->
     <div v-if="viewMode === 'live'" class="hh-iframe-wrap">
-      <iframe src="http://localhost:8000/" class="hh-iframe" title="Live Ryanair Help Hub App"></iframe>
+      <iframe src="http://localhost:8000/?v=20261008-seatfix2" class="hh-iframe" title="Live Ryanair Help Hub App"></iframe>
     </div>
 
     <!-- Mode 2: Authentic Generated Stitch HTML Wireframe (Screen-E..G.html) -->
@@ -402,7 +413,7 @@ function continueFromPage2() {
         <div v-if="helpResponse" class="hh-lavender-panel hh-adk-answer">
           <div class="hh-ai-header hh-ai-header-between">
             <div>
-              <span class="hh-sparkle">✦</span>
+              <span class="hh-sparkle">{{ helpResponse.guardrailStatus === 'BLOCK' ? '🛡️' : '✦' }}</span>
               <span>{{ helpResponse.headline }}</span>
             </div>
             <button type="button" class="hh-dismiss-btn" @click="helpResponse = null">×</button>
@@ -411,6 +422,7 @@ function continueFromPage2() {
           <div class="hh-tool-badges">
             <span class="hh-pill-indigo">ADK · {{ helpResponse.model }} · {{ helpResponse.latencyMs }}ms</span>
             <span v-for="t in helpResponse.tools" :key="t" class="hh-pill-tool">⚙ {{ t }}</span>
+            <span class="hh-pill-tool">✓ {{ helpResponse.guardrailModel || 'gemini-3.5-flash-lite' }} · {{ helpResponse.guardrailStatus || 'PASS' }}</span>
           </div>
         </div>
 

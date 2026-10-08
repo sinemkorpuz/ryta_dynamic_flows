@@ -402,6 +402,12 @@
             "maxLength": 280,
             "minLength": 1,
             "title": "Query"
+          },
+          "entry_point": {
+            "type": "string",
+            "pattern": "^(searchbar|quick_chip)$",
+            "title": "Entry Point",
+            "default": "searchbar"
           }
         },
         "type": "object",

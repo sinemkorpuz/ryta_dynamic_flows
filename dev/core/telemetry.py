@@ -4,20 +4,29 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import tempfile
 from typing import Any
 import uuid
 
 from dev.core.models import RESULTS_DIR, ExecutionContext, validate_against_contract
 
 DEFAULT_TRACE_LOG_PATH = RESULTS_DIR / "telemetry_traces.jsonl"
+FALLBACK_TRACE_LOG_PATH = Path(tempfile.gettempdir()) / "ryta_telemetry_traces.jsonl"
 
 
 class TelemetryEmitter:
     """Emits schema-validated execution logs conforming to contracts/telemetry.jsons."""
 
     def __init__(self, log_path: Path | None = None) -> None:
-        self.log_path = log_path or DEFAULT_TRACE_LOG_PATH
-        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        target = log_path or DEFAULT_TRACE_LOG_PATH
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("a", encoding="utf-8"):
+                pass
+            self.log_path = target
+        except OSError:
+            FALLBACK_TRACE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            self.log_path = FALLBACK_TRACE_LOG_PATH
 
     def emit(
         self,
@@ -82,8 +91,14 @@ class TelemetryEmitter:
             record["gen_ai.usage.output_tokens"] = output_tokens
 
         validate_against_contract(record, "telemetry.jsons")
-        with self.log_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, ensure_ascii=True) + "\n")
+        line = json.dumps(record, ensure_ascii=True) + "\n"
+        try:
+            with self.log_path.open("a", encoding="utf-8") as handle:
+                handle.write(line)
+        except OSError:
+            self.log_path = FALLBACK_TRACE_LOG_PATH
+            with self.log_path.open("a", encoding="utf-8") as handle:
+                handle.write(line)
         return record
 
 

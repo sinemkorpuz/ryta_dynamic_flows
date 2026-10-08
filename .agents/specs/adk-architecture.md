@@ -30,6 +30,7 @@ project-root/
 │   ├── checkin_flow.jsons            # Session init, signal overrides, and dynamic offer pages
 │   ├── seat_map.jsons                # Boeing 737 cabin layout, child rules, and row 12 block
 │   ├── basket_checkout.jsons         # Basket mutations, payment, and boarding pass issuance
+│   ├── assist_query.jsons            # Screen E Help Hub ADK query, guardrails, and tool trace
 │   └── analytics_summary.jsons       # Screen 10 model feedback loop KPIs and offer table
 │
 └── dev/
@@ -148,22 +149,27 @@ When the user taps `"Choose seats"` on Offer Page 1, the backend serves the Boei
 
 ### 4.5 ADK Assistant Copy & Interactive Trip Assistant (`dev/skills/assistant_copy/skill.py`)
 
-The `assistant_copy` skill wraps two Google ADK `Agent` instances executed via `google.adk.runners.InMemoryRunner` (`GEMINI_FLASH_MODEL = "gemini-3.8-flash"` with automatic live model fallback to `"gemini-2.5-flash"`):
+The `assistant_copy` skill executes via Google ADK `InMemoryRunner` backed by Vertex AI (`GOOGLE_GENAI_USE_VERTEXAI=TRUE`) using a two-tier Gemini 3 model architecture (`GEMINI_FLASH_LITE_MODEL = "gemini-3.5-flash-lite"` for input safety and travel-assistance scope classification, and `GEMINI_FLASH_MODEL = "gemini-3.8-flash"` for primary reasoning and tool orchestration, with zero fallback to deprecated 2.x models and zero double execution):
 
 1. **Page Assembly Insight Copy (`assistant_copy_synthesizer`):**
    - **Input Context:** Receives structured passenger signals, active page index, and selected primary cards.
    - **Guardrail Validator (`validate_assistant_copy`):** Inspects generated `heading` and `supporting_text` before returning:
-     - Rejects any text containing `"AI"`, `"artificial intelligence"`, `"model"`, `"algorithm"`, or `"bot"` (case-insensitive).
-     - Rejects any text containing countdown or scarcity patterns (`\d{2}:\d{2}`, `"hurry"`, `"only \d+ left"`, `"running out"`).
-     - Enforces length bounds (`heading <= 48 chars`, `supporting_text <= 90 chars`).
-   - **220ms Circuit Breaker & Canonical Fallback:** If the ADK call exceeds 220ms, raises an exception, or fails guardrail validation, or if `persona_id == "marta_byrne"` with unmodified signals (where verbatim Stitch copy is required), the skill returns the canonical Stitch copy and records the guardrail status in [`contracts/telemetry.jsons`](../../contracts/telemetry.jsons).
-2. **Interactive Help Hub Trip Assistant & Live Simulation (`help_hub_trip_assistant`):**
-   - **Session-Scoped ADK Tools:** Binds four deterministic Python tools to the active check-in session:
-     - `get_trip_and_ancillary_scores()`: Returns live booking metadata (`FR1234`, `DUB → FAO`), signal parameters, propensity scores (`0.84, 0.71, 0.58, 0.29, ...`), and basket items.
-     - `inspect_family_seat_map()`: Returns Boeing 737 Row 12 (`12A–12D`, `€24.00`) availability and Overwing Exit Row 16 child restrictions.
-     - `update_simulation_signals(trip_length_days, child_count, prior_priority_trips, insurance_decline_streak, hours_to_departure, reset_persona)`: Mutates live session simulation signals, re-runs `ancillary_ranking` and `page_builder`, and returns the updated funnel step count (`2 STEPS` vs `1 STEP`).
-     - `modify_basket_item(product_code, action, quantity)`: Adds or removes ancillaries (`priority_boarding`, `reserved_seating`, `checked_bag_20kg`, `car_hire`) in the active session basket.
-   - **Execution & Telemetry:** Runs with an interactive timeout of `4.5s` (falling back deterministically while still executing tool mutations when offline) and returns `headline`, `subtext`, `invoked_tools`, `latency_ms`, `state_mutated`, `signals`, `basket`, and `session`.
+     - Rejects any text containing `"AI"`, `"artificial intelligence"`, `"model"`, `"algorithm"`, `"llm"`, or `"bot"` (case-insensitive), or internal symbol leakage.
+     - Rejects any text containing countdown or scarcity dark patterns (such as `"Seats held for 09:42"`, `"hurry"`, `"only \d+ left"`, `"running out"`), while permitting valid 24h flight schedule times (`05:55`, `06:05`, `06:35`).
+     - Enforces length bounds (`heading <= 64 chars`, `supporting_text <= 160 chars`).
+   - **220ms Circuit Breaker & Canonical Fallback:** If the ADK call exceeds 220ms, raises an exception, or fails guardrail validation, or for canonical preset sessions where verbatim Stitch copy is required, the skill returns the canonical Stitch copy and records the guardrail status in [`contracts/telemetry.jsons`](../../contracts/telemetry.jsons).
+2. **Interactive Help Hub Trip Assistant & Safeguard Pipeline (`help_hub_trip_assistant`):**
+   - **Stage 1 — Safety & Travel-Assistance Guardrail (`gemini-3.5-flash-lite` / `before_model_callback`):**
+     - Sanitizes input (`1..280` chars, strips HTML/control chars) and screens for prompt injection, system-instruction overrides, and cross-booking PNR probing (`screen_user_query`).
+     - Classifies via `gemini-3.5-flash-lite` whether the query is safe and related to travel or check-in assistance for the active trip (`FR1234`, `DUB → FAO`, `X8Y9QL`). Off-topic or adversarial queries short-circuit in `before_model_callback` (`guardrail_status = "BLOCK"`, zero downstream `gemini-3.8-flash` or tool invocations).
+   - **Stage 2 — Single-Pass `gemini-3.8-flash` Agent & Session-Scoped Tools:**
+     - Configured with immutable `static_instruction` (defining untrusted `<passenger_query>` boundaries, canonical euro prices, Row 12 / child safety rules, and output format) and `GenerateContentConfig` (`temperature=0.1`, `max_output_tokens=180`, `SafetySettings`).
+     - Binds four session-scoped tools guarded by `before_tool_callback` (which enforces explicit user mutation/simulation intent and deduplicates tool calls within a turn so no tool ever executes twice):
+       - `get_trip_and_ancillary_scores()`: Returns live booking metadata (`FR1234`, `DUB → FAO`), signal parameters, and propensity scores (`0.84, 0.71, 0.58, 0.29, ...`).
+       - `inspect_family_seat_map()`: Returns Boeing 737 Row 12 (`12A–12D`, `€24.00`) availability and Overwing Exit Row 16 child restrictions.
+       - `update_simulation_signals(prior_priority_trips, children_count, trip_nights, force_zero_offer)`: Mutates live session simulation signals when the query expresses simulation intent, re-runs `ancillary_ranking` and `page_builder`, and returns the updated funnel step count (`2 STEPS` vs `1 STEP`).
+       - `modify_basket_item(product_id, quantity)`: Adds or removes eligible ancillaries (`priority_boarding`, `reserved_seats`, `checked_bag_20kg`, `car_hire`) only when the passenger query contains an explicit mutation verb.
+   - **Zero Double Execution & Telemetry:** Executes with a `4.5s` interactive deadline. If `gemini-3.8-flash` already invoked tools during the turn and post-model output formatting requires fallback copy, `answer_trip_question` synthesizes copy from the updated session state without re-invoking `tool_callbacks`. Validates responses against [`contracts/assist_query.jsons`](../../contracts/assist_query.jsons) and emits trace records to [`contracts/telemetry.jsons`](../../contracts/telemetry.jsons).
 
 ---
 

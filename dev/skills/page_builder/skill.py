@@ -336,7 +336,12 @@ class CheckinFlowService:
         state = self._require_session(session_id)
         return deepcopy(state["response"])
 
-    def assist_session(self, session_id: str, query: str) -> dict[str, Any]:
+    def assist_session(
+        self,
+        session_id: str,
+        query: str,
+        entry_point: str = "searchbar",
+    ) -> dict[str, Any]:
         """Answer a Help Hub trip question and execute ADK tools grounded in the session's live state."""
         state = self._require_session(session_id)
         context = state["context"]
@@ -360,6 +365,7 @@ class CheckinFlowService:
                 signals=signals,
                 selected_quantities=state["selected_quantities"],
                 context=context,
+                use_orchestrator=False,
             )
             resp = state["response"]
             resp["persona_id"] = base_persona
@@ -374,7 +380,7 @@ class CheckinFlowService:
                     screen_key="zero_offer",
                     signals=signals,
                     context=context,
-                    orchestrator=self.orchestrator,
+                    orchestrator=None,
                     telemetry=self.telemetry,
                 )
             else:
@@ -411,8 +417,10 @@ class CheckinFlowService:
 
         return answer_trip_question(
             query=query,
+            entry_point=entry_point,
             session_state=state,
             context=context,
+            orchestrator=self.orchestrator,
             telemetry=self.telemetry,
             signal_mutator=_mutate_signals,
             basket_mutator=_mutate_basket,
@@ -437,9 +445,15 @@ class CheckinFlowService:
     ) -> dict[str, Any]:
         """Confirm Row 12 seats (12A-12D) and advance directly to Offer Page 2 (Screen B)."""
         state = self._require_session(session_id)
-        seats = seat_designators or ["12A", "12B", "12C", "12D"]
+        raw_seats = seat_designators or ["12A", "12B", "12C", "12D"]
+        seats = [
+            str(s).strip()
+            for s in raw_seats
+            if s and "undefined" not in str(s).lower() and str(s).strip()
+        ] or ["12A", "12B", "12C", "12D"]
         if any(s.startswith("14") for s in seats):
             raise ValueError("Row 14 seats are prohibited by the Stitch Consistency Contract.")
+        state["selected_seats"] = seats
 
         state["selected_quantities"]["reserved_seats"] = 1
         self._counters["offers_accepted_by_id"]["reserved_seats"] = (
@@ -659,6 +673,7 @@ class CheckinFlowService:
         signals: dict[str, Any],
         selected_quantities: dict[str, int],
         context: ExecutionContext,
+        use_orchestrator: bool = True,
     ) -> list[dict[str, Any]]:
         """Pack primary cards (score >= 0.50) and drawer items (0.10 <= score < 0.50) into 0-2 pages."""
         primary_items = [item for item in evaluated if item["placement"] == "primary_card"]
@@ -671,6 +686,7 @@ class CheckinFlowService:
         page2_items = primary_items[2:4]
         total_pages = 2 if page2_items else 1
         pages: list[dict[str, Any]] = []
+        active_orchestrator = self.orchestrator if use_orchestrator else None
 
         # Build Offer Page 1
         p1_cards = [self._hydrate_card(item["product_id"], selected_quantities) for item in page1_items]
@@ -690,7 +706,7 @@ class CheckinFlowService:
                     screen_key="offer_page_1",
                     signals=signals,
                     context=context,
-                    orchestrator=self.orchestrator,
+                    orchestrator=active_orchestrator,
                     telemetry=self.telemetry,
                 ),
                 "cards": p1_cards,
@@ -718,7 +734,7 @@ class CheckinFlowService:
                         screen_key="offer_page_2",
                         signals=signals,
                         context=context,
-                        orchestrator=self.orchestrator,
+                        orchestrator=active_orchestrator,
                         telemetry=self.telemetry,
                     ),
                     "cards": p2_cards,
